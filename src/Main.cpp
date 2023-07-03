@@ -43,11 +43,11 @@ float ManaShield(RE::Actor* target, float& damage)
 
     if (hasAbsorb) 
     {
-        if (target->GetActorValue(RE::ActorValue::kMagicka) < 500) 
+        if (target->GetActorValue(RE::ActorValue::kMagicka) < 40) 
         {
             auto handler = RE::TESDataHandler::GetSingleton();
             //RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x3CDE57, espName);  //Slow time test spell
-            RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x57C91C, espName);
+            RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x57C91C, espName); // Cast Dispel if unit has 40 or less MP
             target->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)
                ->CastSpellImmediate(spellToCast, false, nullptr, 1.0f, false, 0.0f, target);
             return damage;
