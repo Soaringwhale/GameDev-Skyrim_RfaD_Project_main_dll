@@ -43,6 +43,15 @@ float ManaShield(RE::Actor* target, float& damage)
 
     if (hasAbsorb) 
     {
+        if (target->GetActorValue(RE::ActorValue::kMagicka) < 500) 
+        {
+            auto handler = RE::TESDataHandler::GetSingleton();
+            //RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x3CDE57, espName);  //Slow time test spell
+            RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x57C91C, espName);
+            target->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)
+               ->CastSpellImmediate(spellToCast, false, nullptr, 1.0f, false, 0.0f, target);
+            return damage;
+        }
         if (hasNoArmor)
         {
             if (hasAlteration) 
@@ -89,7 +98,7 @@ float manaShield(RE::Actor* target, RE::HitData hit_data)
         static void Hook() 
         {
             old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37673).address() + 0x3c0,        // Original function copied and transfered to another address
-                                                           new_func);  // SkyrimSE.exe+(0x628c20+0x3ñ0)
+                                                           new_func);  // SkyrimSE.exe+(0x628c20+0x3Ã±0)
         }
 
     private:
