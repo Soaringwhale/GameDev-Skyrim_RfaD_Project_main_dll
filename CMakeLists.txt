@@ -28,7 +28,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources}) # <--- sp
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
 
-set(OUTPUT_FOLDER "E:/RfaDChicken/MO2/mods/5.1.9.3__RU_Patch_") #<--- your Skyrim folder
+set(OUTPUT_FOLDER "C:/ART/11")          # <--- output folder
 
 if(DEFINED OUTPUT_FOLDER)
 

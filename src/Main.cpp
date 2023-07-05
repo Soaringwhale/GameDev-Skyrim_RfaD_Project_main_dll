@@ -26,30 +26,29 @@ float TotalDmgCalc(RE::Actor* target, float& damage, float absorbCoeff, float co
 
 float ManaShield(RE::Actor* target, float& damage) 
 {
-    float manaCostPerDmg = -4;      // Magicka cost per 1 physical damage (mod)
+    const char* awakenEsp = "RfaD SSE - Awaken.esp";
     auto handler = RE::TESDataHandler::GetSingleton();
-    const int absorbPerkID = 0x63819A;      // Perk giving mana shield effect (mod)
-    const int noArmorPerkID = 0x63819B;     // Perk improving mana shield efficiency with no armor on a character (mod)
-    const int alterationBoostPerkID = 0x0D7999;     // Perk improving mana shield efficiency (original game)
-    const char* espName = "RfaD SSE - Awaken.esp";
-    auto absorbPerk = handler->LookupForm<RE::BGSPerk>(absorbPerkID, espName);
-    auto noArmorPerk = handler->LookupForm<RE::BGSPerk>(noArmorPerkID, espName);
-    auto alterationBoostPerk = RE::TESForm::LookupByID<RE::BGSPerk>(alterationBoostPerkID);
-    float absorbCoeff;      // Absorbed/non-absorbed phys damage ratio
-    bool hasAbsorb = target->HasPerk(absorbPerk);
-    bool hasNoArmor = target->HasPerk(noArmorPerk);
-    bool hasAlteration = target->HasPerk(alterationBoostPerk);
+
+    float manaCostPerDmg = -4;          // Magicka cost per 1 physical damage (mod)
+    float absorbCoeff;                  // Absorbed/non-absorbed phys damage ratio
+
+    auto manaShieldSpell = handler->LookupForm<RE::SpellItem>(0x535A3F, awakenEsp);              // mana shield const spell 
+    auto noArmorCheckEff = handler->LookupForm<RE::EffectSetting>(0x63819D, awakenEsp);          // no armor checker magic effect
+    auto alterationBoostPerk = RE::TESForm::LookupByID<RE::BGSPerk>(0x0D7999);                   // alteration perk  (from skyrim.esm)
+    
+    bool hasAbsorb = target->HasSpell(manaShieldSpell);                 //  if player has manaShield
+    bool hasNoArmor = target->HasMagicEffect(noArmorCheckEff);          //  if player has no armor
+    bool hasAlteration = target->HasPerk(alterationBoostPerk);          //  if player has alreration perk
     float resultDmg;
 
     if (hasAbsorb) 
     {
-        if (target->GetActorValue(RE::ActorValue::kMagicka) < 40) 
+        if (target->GetActorValue(RE::ActorValue::kMagicka) < 40)       //  spell break if mana < 40
         {
             auto handler = RE::TESDataHandler::GetSingleton();
-            //RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x3CDE57, espName);  //Slow time test spell
-            RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x57C91C, espName); // Cast Dispel if unit has 40 or less MP
-            target->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)
-               ->CastSpellImmediate(spellToCast, false, nullptr, 1.0f, false, 0.0f, target);
+            //RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x3CDE57, awakenEsp);                                                 //Slow time test spell
+            RE::SpellItem* spellToCast = handler->LookupForm<RE::SpellItem>(0x57C91C, awakenEsp);            // refrain explosion and dispel 
+            target->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(spellToCast, false, nullptr, 1.0f, false, 0.0f, target);
             return damage;
         }
         if (hasNoArmor)
@@ -58,28 +57,28 @@ float ManaShield(RE::Actor* target, float& damage)
             {
                 absorbCoeff = 0.3;
                 resultDmg = TotalDmgCalc(target, damage, absorbCoeff, manaCostPerDmg);
-                SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
-                SKSE::log::info("No Armor perk and Alteration perk is on you");
+                //SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
+                //SKSE::log::info("No Armor perk and Alteration perk is on you");
                 return resultDmg;
             }
             absorbCoeff = 0.25;
             resultDmg = TotalDmgCalc(target, damage, absorbCoeff, manaCostPerDmg);
-            SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
-            SKSE::log::info("No Armor perk is on you");
+            //SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
+            //SKSE::log::info("No Armor perk is on you");
             return resultDmg;
         }
         if (hasAlteration)
         {
             absorbCoeff = 0.25;
             resultDmg = TotalDmgCalc(target, damage, absorbCoeff, manaCostPerDmg);
-            SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
-            SKSE::log::info("Alteration perk is on you");
+            //SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
+            //SKSE::log::info("Alteration perk is on you");
             return resultDmg;
         }
         absorbCoeff = 0.2;
         resultDmg = TotalDmgCalc(target, damage, absorbCoeff, manaCostPerDmg);
-        SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
-        SKSE::log::info("no perks are on you!");
+        //SKSE::log::info("{} total, {} absorbed, {}% absorption", damage, damage - resultDmg, absorbCoeff * 100);
+        //SKSE::log::info("no perks are on you!");
         return resultDmg;
     }
     SKSE::log::info("no Mana Shield");
