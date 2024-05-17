@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Set your project name. This will be the name of your SKSE .dll file.
-project(ManaShield VERSION 1.0.0 LANGUAGES CXX)
+project(refrain_nextgen VERSION 1.0.0 LANGUAGES CXX)
 
 if(DEFINED ENV{SKYRIM_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_FOLDER}/Data")
     set(OUTPUT_FOLDER "$ENV{SKYRIM_FOLDER}/Data")
@@ -12,10 +12,23 @@ if(DEFINED ENV{SKYRIM_MODS_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_MODS_FOLDER}")
 endif()
 
 set(headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h)
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/ActionManager.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/core.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/InputWatcher.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/ItemCardFixer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/utils.h
+) 
 
 set(sources
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Main.cpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Main.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/src/ActionManager.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/src/gameplay.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/src/InputWatcher.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/src/ItemCardFixer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.cpp	
+)
 
 source_group(
         TREE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -28,7 +41,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources}) # <--- sp
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
 
-set(OUTPUT_FOLDER "C:/ART/11")          # <--- output folder
+set(OUTPUT_FOLDER "C:/ART/11") #<--- your Skyrim folder
 
 if(DEFINED OUTPUT_FOLDER)
 
