@@ -184,7 +184,7 @@ auto u_enchant_equipped_weapon (RE::InventoryChanges* changes, RE::TESBoundObjec
     return func(changes, boundOb, extraList, ench, amount);
 }
 
-RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)   // check later
+RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)
 {
     auto inv = actor->GetInventory ([](RE::TESBoundObject& obj) { if(obj.IsWeapon()) return true; else return false;} );	 // lambda (boolean function-filter)  
 	//   inv - map of inventory items {item, data}
@@ -204,6 +204,34 @@ RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)   // c
         }
     }
     return nullptr;
+}
+
+RE::ExtraPoison* u_get_pc_poison()
+{
+    LOG("called u_get_pc_poison()");
+    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(false)) {
+        if (weapEntryData->IsPoisoned() && weapEntryData->extraLists) {
+            if (auto extraData = weapEntryData->extraLists->front()) {
+                if (auto poisonData = extraData->GetByType<RE::ExtraPoison>()) {
+                    return poisonData;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+void u_remove_pc_poison()
+{
+    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(false)) {
+        if (weapEntryData->IsPoisoned() && weapEntryData->extraLists) {
+            if (auto extraData = weapEntryData->extraLists->front()) {
+                if (auto poisonData = extraData->GetByType<RE::ExtraPoison>()) {
+                    extraData->Remove(RE::ExtraPoison::EXTRADATATYPE, poisonData);
+                }
+            }
+        }
+    }
 }
 
 void u_kill_projectile(RE::Projectile* proj)
@@ -586,15 +614,6 @@ TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)			//  обе
     return TESForm::LookupByID(id);
 }
 
-//TESForm* Utils::GetFormFromConfigString(const std::string str) {		
-//    std::string formIDstr;
-//    std::string plugin = SplitString(str, "|", formIDstr);
-//    if (formIDstr.length() != 0) {
-//         uint32_t formID = std::stoi(formIDstr, 0, 16);
-//         return GetFormFromMod(plugin, formID);
-//    }
-//    return nullptr;
-//}
 
 bool  Utils::PerformAction (BGSAction* action, Actor* actor)
 {

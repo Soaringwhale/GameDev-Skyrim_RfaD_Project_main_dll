@@ -63,7 +63,7 @@ namespace my
     static RE::EffectSetting* oil_garlic;
     static RE::BGSKeyword* arrowReflectKW;
         
-    static RE::BGSKeyword* oil_effect_KW;
+    static RE::BGSKeyword* oil_keyword;
     static RE::EffectSetting* bindsInfo_eff;
     static RE::EffectSetting* meridia_kd;
     static RE::TESEffectShader* bloodBubbles_FX;
@@ -182,6 +182,7 @@ namespace my
     static uint32_t  instantAbIndex;
     static uint32_t  rightHandKeyCode;
     static int log_counter;
+    static float waitStartGameHour;
     static std::string  sf_noEffects, sf_rem_current, sf_add_new, sf_removed, sf_all_clear, sf_speed_text,
 					    sf_penetr_text, sf_armor_text, sf_reflect_text, sf_absorb_text, sf_stamina_text,
 						adrenaline_text, adrenalineMax_text, oil_decline_text;
@@ -196,6 +197,7 @@ namespace my
     void fill_gamePointers();
     void fill_data();
     void fill_translation();
+    void on_wait();
 
     static RE::ArrowProjectile* reflectedArrow;
 };
@@ -322,9 +324,16 @@ void on_unequip(RE::Actor* actor, RE::TESBoundObject* object);
 
 void on_death (RE::Actor* victim, RE::Actor* killer);
 
+void on_wait_menu_open();
+void on_wait_menu_close();
+void on_inventory_open();
+void on_inventory_close();
+
 void on_valueMod_Effect_Finish(RE::ValueModifierEffect* modEff);
 
 void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item);
+
+void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int count);
 
 //bool on_arrow_collide(RE::Projectile* proj, RE::hkpCollidable* coll); 
 

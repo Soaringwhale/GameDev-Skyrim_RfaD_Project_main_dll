@@ -64,6 +64,10 @@ void u_updQuestTextGlob (RE::TESQuest* quest, RE::TESGlobal *glob);
 
 auto u_get_actors_weap_ench (RE::Actor* a, bool left) -> RE::EnchantmentItem*;
 
+auto u_get_pc_poison() -> RE::ExtraPoison*;
+
+void u_remove_pc_poison();
+
 auto u_get_worn_equip_weight(RE::Actor* actor) -> float;
 
 auto u_damage_av (RE::Actor* actor, RE::ActorValue av, float magn) -> void;

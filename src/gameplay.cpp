@@ -7,64 +7,6 @@
 #include "core.h"
 
 
-namespace gameplay 
-{
-
-   void oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
-   {
-
-      if (!hit_data->weapon) return;
-      if (hit_data->weapon->formID != my::oiled_weapon_id->value) return;        // check that we hit with same weapon that was oiled
-      
-      float damage = hit_data->totalDamage;
-      
-      if (pl->HasMagicEffect(my::oil_silverdust))        // silver oil
-      {
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::silverBurn, false, target, 1.f, false, 25.f + damage*0.12f, pl);
-      }
-      else if (pl->HasMagicEffect(my::oil_disease))   // disease oil
-      {
-          auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // this oil ignores 50% of disease res, so 100% res will make 50% effectiveness
-          float effnss = (1.f - (diseaseRes / 200.f));
-            pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::oil_diseaseOnHit, false, target, effnss, false, 0.f, pl);
-      }
-      else if (pl->HasMagicEffect(my::oil_ignite))    // ignite oil
-      {    
-            u_cast (my::oil_igniteOnHit1, target, pl);                                 // decrease fire res
-          int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
-          if (fireRes < -30) fireRes = -30;
-          int random = rand() % (fireRes+50);
-          if (random < 15) u_cast(my::oil_igniteOnHit2, target, pl);    // ignite %
-      }
-      else if (pl->HasMagicEffect(my::oil_frost))    // frost oil
-      {    
-            // convert dmg is in onHit func..
-            int frostRes = int(target->GetActorValue(RE::ActorValue::kResistFrost));
-          if (frostRes < -10) frostRes = -10;
-          int random = rand() % (frostRes+40);
-          if (random < 10) u_cast(my::oil_frostOnHit, target, pl); 
-      }
-      else if (pl->HasMagicEffect(my::oil_poison))    // poison oil
-      {    
-            float poisonRes = target->GetActorValue(RE::ActorValue::kPoisonResist);
-          if (poisonRes < 0) poisonRes = 0;
-          float effnss = (1.f - (poisonRes / 100.f));
-          int random = rand() % 10;
-          if (random < 4) {
-                pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::oil_poisonOnHit, false, target, effnss, false, 0.f, pl);
-            }
-      }
-      else if (pl->HasMagicEffect(my::oil_garlic))    // garlic oil
-      {    
-            if (target->HasSpell(my::vampirism)) u_cast (my::oil_garlicOnHit, target, pl);
-      }
-      else
-      {
-            my::oiled_weapon_id->value = 0;     // if we haven't any active oil, set checker off
-      }
-   }
-}
-
 
 
 namespace qst
@@ -448,7 +390,7 @@ void check_horseCert()
              RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 2500.f;                                // price = 2500
              mys::player->RemoveItem(certificate, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);     // remove cert
         }
-    else RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 0.f;  // have cert but haven't bought a horse yet = price 0
+        else RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 0.f;  // have cert but haven't bought a horse yet = price 0
     }
     else RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 2500.f;   // have no cert = price 2500
 }

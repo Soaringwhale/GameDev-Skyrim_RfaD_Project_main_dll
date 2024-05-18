@@ -208,7 +208,7 @@ class OnApplyResist_Hook        //  срабатывает при порезке
 
 
 
-class OnPlayerDrinkPotion_Hook            // before drinking, сan decline potion
+class OnPlayerDrinkPotion_Hook            // before drinking, сan decline potion. Doesn't check poisons
 {
   public:
     static void install_hook()    {
@@ -229,6 +229,24 @@ class OnPlayerDrinkPotion_Hook            // before drinking, сan decline potio
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
+
+class OnApplyPoison_Hook        // apply poison to weapon
+{
+public:
+    static void install_hook() {
+       old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(39407).address() + 0x106, new_func);
+    }
+private:
+    static void new_func(RE::InventoryEntryData* data, RE::AlchemyItem* poison, int count) {
+
+	   if (data && poison && count > 0) {
+           on_apply_poison(data, poison, count);
+       }
+       return old_func (data, poison, count);
+    }
+
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
 
 class OnAdjustActiveEffect_Hook        //    before adjust
 {
@@ -293,18 +311,6 @@ class CastSpeed_Hook
  private:
     static void new_func(RE::MagicCaster* mcaster, float dtime)
     {
-        //enum class State {        //  if need copypast to RE::MagicCaster::State
-        //    kNone = 0,
-        //    kUnk01,  // Start?
-        //    kUnk02,  // StartCharge?
-        //    kReady,
-        //    kUnk04,  // PreStart?
-        //    kCharging,
-        //    kCasting,
-        //    kUnk07,  // Unknown
-        //    kUnk08,  // Interrupt
-        //    kUnk09,  // Interrupt/Deselect
-        //};
        using S = RE::MagicCaster::State;
        uint32_t state = mcaster->state.underlying();
        // if (state == static_cast<uint32_t>(S::kUnk01) || state == static_cast<uint32_t>(S::kUnk02))    // old
@@ -466,7 +472,7 @@ void my::install_new_hooks()
 
 using ActorKillev = RE::ActorKill::Event;
 
-class OnDeathEvent : public RE::BSTEventSink<ActorKillev>      // inherit, to override ProcessEvent() function and write our logic on death                                                          
+class OnDeathEvent : public RE::BSTEventSink<ActorKillev>      // override ProcessEvent() and write our logic on death                                                          
 {
 public:
     virtual RE::BSEventNotifyControl ProcessEvent (const ActorKillev* evn, RE::BSTEventSource<ActorKillev>*) override
@@ -474,8 +480,7 @@ public:
        on_death(evn->victim, evn->killer);
        return RE::BSEventNotifyControl::kContinue;    // must be at the end of ProcessEvent()
     }
-    static OnDeathEvent* GetSingleton()
-    {
+    static OnDeathEvent* GetSingleton()    {
        static OnDeathEvent singleton;
        return std::addressof(singleton);
     }
@@ -485,6 +490,36 @@ public:
     }
 };
 
+
+class MenuOpenCloseEventSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+{
+public:
+	virtual RE::BSEventNotifyControl ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+	{
+        if (ev) {
+           if (ev->menuName == "Sleep/Wait Menu")
+		   {
+                if (ev->opening) on_wait_menu_open();
+                else             on_wait_menu_close();
+           }
+		   else if (ev->menuName == "InventoryMenu")
+		   {
+			    if (ev->opening) on_inventory_open();
+                else             on_inventory_close();
+		   }
+        }
+		return RE::BSEventNotifyControl::kContinue;
+	}
+
+    static MenuOpenCloseEventSink* GetSingleton() {
+        static MenuOpenCloseEventSink singleton;
+        return std::addressof(singleton);
+    }
+    void enable()
+    { 
+		RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
+    }
+};
 
 
 //------------------------------------------------------ for descriptions --------------------------
@@ -565,7 +600,7 @@ namespace description_hooks
         };
     }
 
-    namespace MenuHooks    // хуки меню
+    namespace MenuHooks    // menu hooks for xdescriptions
     {
 
         // функция применения описания. По сути само описание вставляется (если нужно) раньше в хуках карточки, а здесь происходит его apply к предмету
@@ -833,9 +868,11 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
            OnEffectFinish_Hook::install_hook();
            //OnApplyResist_Hook::install_hook();
            OnPlayerDrinkPotion_Hook::install_hook();
+           OnApplyPoison_Hook::install_hook();
            //OnAttackAction_Hook::install_hook();
            InputWatcher::GetSingleton()->enable();            // key press event
            OnDeathEvent::GetSingleton()->enable();            // on  death event
+           MenuOpenCloseEventSink::GetSingleton()->enable();  // open/close menu event
            description_hooks::Install_Hooks();
            break;
         case SKSE::MessagingInterface::kPostLoadGame:        // Player's selected save game has finished loading
