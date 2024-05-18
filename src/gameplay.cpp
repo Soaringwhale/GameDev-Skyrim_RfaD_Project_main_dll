@@ -4,8 +4,117 @@
 #pragma once
 
 #include "utils.h"
+#include "gameplay.h"
 #include "core.h"
 
+
+namespace gameplay 
+{
+
+   bool oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
+   {
+      LOG("called oil_proc");
+	  
+	  auto poisonData = u_get_pc_poison();
+      if (!poisonData) return false;
+      auto oil_id = poisonData->poison->formID;
+
+      if (oil_id == oil_silver->formID)        // silver oil
+      {
+          float damage = hit_data->totalDamage;
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverBurn, false, target, 1.f, false, 25.f + damage*0.12f, pl);
+      }
+      else if (oil_id == oil_disease->formID)   // disease oil
+      {
+          auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // ignores 50% of disease res, 100% res will make 50% effnss
+          float effnss = (1.f - (diseaseRes / 200.f));
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss, false, 0.f, pl);
+      }
+      else if (oil_id == oil_ignite->formID)    // ignite oil
+      {    
+          u_cast (oil_igniteOnHit1, target, pl);                                 // decrease fire res
+          int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
+          if (fireRes < -30) fireRes = -30;
+          int random = rand() % (fireRes+50);
+          if (random < 15) u_cast(oil_igniteOnHit2, target, pl);    // ignite %
+      }
+      else if (oil_id == oil_frost->formID)     // frost oil
+      {    
+          int frostRes = int(target->GetActorValue(RE::ActorValue::kResistFrost));
+          if (frostRes < -10) frostRes = -10;
+          int random = rand() % (frostRes+40);
+          if (random < 10) u_cast (oil_frostOnHit, target, pl); 
+		  return true;                                            // convert dmg to frost in core.cpp
+      }
+      else if (oil_id == oil_poison->formID)     // poison oil
+      {    
+          float poisonRes = target->GetActorValue(RE::ActorValue::kPoisonResist);
+          if (poisonRes < 0) poisonRes = 0;
+          float effnss = (1.f - (poisonRes / 100.f));
+          int random = rand() % 10;
+          if (random < 4) {
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss, false, 0.f, pl);
+          }
+      }
+      else if (oil_id == oil_garlic->formID)    // garlic oil
+      {    
+          if (target->HasSpell(vampirism)) u_cast (oil_garlicOnHit, target, pl);
+      }
+      
+      return false;
+   }
+
+   void windRunnerCheck(RE::Actor* pl)
+   {
+      if (pl->HasMagicEffect(my::adrenalineKD)) return;
+
+      if (pl->HasPerk(windRunnerPerk))
+      {
+          float maxHP = u_get_actor_value_max(pl, RE::ActorValue::kHealth);
+          float maxST = u_get_actor_value_max(pl, RE::ActorValue::kStamina);
+          float maxMP = u_get_actor_value_max(pl, RE::ActorValue::kMagicka);
+
+          if  (pl->GetActorValue(RE::ActorValue::kHealth) < maxHP / 2)
+               pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, maxHP * 0.15f);
+          else pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, maxHP * 0.05f);
+
+          if  (pl->GetActorValue(RE::ActorValue::kStamina) < maxST / 2)
+               pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, maxST * 0.15f);
+          else pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, maxST * 0.05f);
+
+          if  (pl->GetActorValue(RE::ActorValue::kMagicka) < maxMP / 2)
+               pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, maxMP * 0.15f);
+          else pl->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, maxMP * 0.05f);
+      }
+   }
+
+
+   void initGameplayPointers()
+   {
+
+      auto handler = RE::TESDataHandler::GetSingleton();
+
+      oil_garlicOnHit = handler->LookupForm<RE::SpellItem>(0x171D9A, "RfaD SSE - Awaken.esp");
+      oil_poisonOnHit = handler->LookupForm<RE::SpellItem>(0x12AE82, "RfaD SSE - Awaken.esp");
+      oil_diseaseOnHit = handler->LookupForm<RE::SpellItem>(0xE9074, "RfaD SSE - Awaken.esp");
+      oil_frostOnHit = handler->LookupForm<RE::SpellItem>(0x12FF98, "RfaD SSE - Awaken.esp");
+      oil_igniteOnHit1 = handler->LookupForm<RE::SpellItem>(0x12AE7E, "RfaD SSE - Awaken.esp");
+      oil_igniteOnHit2 = handler->LookupForm<RE::SpellItem>(0x12AE80, "RfaD SSE - Awaken.esp");
+
+	  oil_silver  = handler->LookupForm<RE::AlchemyItem>(0xCFAEA,  "RfaD SSE - Awaken.esp");
+      oil_disease = handler->LookupForm<RE::AlchemyItem>(0xE906F,  "RfaD SSE - Awaken.esp");
+      oil_frost   = handler->LookupForm<RE::AlchemyItem>(0x12AE84, "RfaD SSE - Awaken.esp");
+	  oil_garlic  = handler->LookupForm<RE::AlchemyItem>(0x16CC7F, "RfaD SSE - Awaken.esp");
+	  oil_ignite  = handler->LookupForm<RE::AlchemyItem>(0x12AE7B, "RfaD SSE - Awaken.esp");
+	  oil_poison  = handler->LookupForm<RE::AlchemyItem>(0x12AE86, "RfaD SSE - Awaken.esp");
+
+	  silverBurn = handler->LookupForm<RE::SpellItem>(0xFA4B56, "RfaD SSE - Awaken.esp");
+      silverBurning = handler->LookupForm<RE::BGSKeyword>(0xFA4B55, "RfaD SSE - Awaken.esp");
+
+	  vampirism = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);
+      windRunnerPerk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F22);
+   }
+}
 
 
 
@@ -448,16 +557,16 @@ namespace qst
     }
     else if (qst::startVigil->currentStage > 0)        //  [VIGILANT]
     {
-            auto this_ = qst::startVigil;
-            auto stage = qst::startVigil->currentStage;
-         //        (stage == 1  && take_amulet_papyrus))                  setStage(this_, 10);   // [1] amulet
-         //        (stage == 10 && deliver_note_papyrus)                  setStage(this_, 20);   // [2] note to carcetta
-        if      (stage == 20 && qMisc("Undead Killed") > 9)           setStage(this_, 30);     // [3] undead x10
-        else if (stage == 30 && qMisc("Daedra Killed") > 4)              setStage(this_, 40);      // [4] daedra x5
-        else if (stage == 40 && qst::DA11->currentStage > 100)          setStage(this_, 50);     // [5] slay cannibals
-        else if (stage == 50 && qst::DA10->currentStage > 65)          setStage(this_, 60);   // [6] tyranus
-        else if (stage == 60 && qst::currGoalVal->value > 19)          setStage(this_, 70);   // [7] vampires x20
-        else if (stage == 70 && qst::isNamiraBossDead->value)          setStage(this_, 80);   // [8] namira canal boss
+        auto this_ = qst::startVigil;
+        auto stage = qst::startVigil->currentStage;
+        //      (stage == 1  && take_amulet_papyrus))                 setStage(this_, 10);   // [1] amulet
+        //      (stage == 10 && deliver_note_papyrus)                 setStage(this_, 20);   // [2] note to carcetta
+        if      (stage == 20 && qMisc("Undead Killed") > 9)           setStage(this_, 30);   // [3] undead x10
+        else if (stage == 30 && qMisc("Daedra Killed") > 4)           setStage(this_, 40);   // [4] daedra x5
+        else if (stage == 40 && qst::DA11->currentStage > 100)        setStage(this_, 50);   // [5] slay cannibals
+        else if (stage == 50 && qst::DA10->currentStage > 65)         setStage(this_, 60);   // [6] tyranus
+        else if (stage == 60 && qst::currGoalVal->value > 19)         setStage(this_, 70);   // [7] vampires x20
+        else if (stage == 70 && qst::isNamiraBossDead->value)         setStage(this_, 80);   // [8] namira canal boss
         else if (stage == 80 && vigharMovarthDead())                  setStage(this_, 90);   // [9] vighar & movart
         else if (stage == 90 && qst::sephirothQuest->currentStage>50) setStage(this_, 100);  // [10] sephiroth
         u_updQuestTextGlob(this_, qst::currGoalVal);

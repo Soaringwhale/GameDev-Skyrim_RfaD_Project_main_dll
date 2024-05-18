@@ -14,6 +14,7 @@ endif()
 set(headers
         ${CMAKE_CURRENT_SOURCE_DIR}/include/ActionManager.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/core.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/gameplay.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/InputWatcher.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/ItemCardFixer.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h

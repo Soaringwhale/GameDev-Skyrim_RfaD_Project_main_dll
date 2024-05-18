@@ -4,6 +4,7 @@
 #include "core.h"
 #include "utils.h"
 #include "ItemCardFixer.h"
+#include "gameplay.h"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
@@ -49,20 +50,19 @@ float               mys::time_delta;
 float               mys::ms_compensator;
 float               mys::eq_weight;
 float               mys::dodge_timer;
-uint16_t           mys::vamp_C_state;
-uint16_t           mys::nb_hold_state;
-uint16_t           mys::xdescr_state;
-bool               mys::xdescr_on;
-bool               mys::hasHeavyArmor;
-bool               mys::attackKeyHolding;
-RE::Actor*           mys::player;
-RE::BGSKeyword*       mys::armorHeavyKw;
-RE::EffectSetting* mys::dodge_KD_eff;
-RE::SpellItem*       mys::dodge_KD_spl;
-RE::BGSPerk*       mys::dodgePerk;
-RE::BGSPerk*       mys::windRunnerPerk;
-RE::TESGlobal*     mys::speed_cast_glob;
-RE::TESGlobal*     mys::gameProcessed;
+uint16_t            mys::vamp_C_state;
+uint16_t            mys::nb_hold_state;
+uint16_t            mys::xdescr_state;
+bool                mys::xdescr_on;
+bool                mys::hasHeavyArmor;
+bool                mys::attackKeyHolding;
+RE::Actor*          mys::player;
+RE::BGSKeyword*     mys::armorHeavyKw;
+RE::EffectSetting*  mys::dodge_KD_eff;
+RE::SpellItem*      mys::dodge_KD_spl;
+RE::BGSPerk*        mys::dodgePerk;
+RE::TESGlobal*      mys::speed_cast_glob;
+RE::TESGlobal*      mys::gameProcessed;
 
 void mys::init_globs()
 { 
@@ -70,7 +70,6 @@ void mys::init_globs()
 
     armorHeavyKw    = RE::TESForm::LookupByID<RE::BGSKeyword>(0x6BBD2);
     dodgePerk       = RE::TESForm::LookupByID<RE::BGSPerk>(0x79376);
-    windRunnerPerk  = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F22);
     dodge_KD_eff    = my::handler->LookupForm<RE::EffectSetting>(0x15D3F4, "devFixes.esp");
     dodge_KD_spl    = my::handler->LookupForm<RE::SpellItem>(0x6AA965, "Requiem.esp");
     speed_cast_glob = my::handler->LookupForm<RE::TESGlobal>(0xBA02F2, "RfaD SSE - Awaken.esp");
@@ -93,7 +92,7 @@ void mys::init_globs()
 
 
 template <typename T>
-T* GetFormFromString (const std::string &formIDstr, const std::string &modname)      // в утилз наверн
+T* GetFormFromString (const std::string &formIDstr, const std::string &modname)      // to utils
 {
     auto form = RE::TESForm::LookupByEditorID(formIDstr);      // skyrim.esm
     if (form && form->As<T>()) {
@@ -114,10 +113,9 @@ T* GetFormFromString (const std::string &formIDstr, const std::string &modname) 
     return nullptr;
 }
 
-std::string trimEnd(const std::string& str) {
+std::string trimEnd (const std::string& str) {
     std::string result = str;
-    result.erase(std::find_if(result.rbegin(), result.rend(), [](int ch) { return !std::isspace(ch); }).base(),
-                 result.end());
+    result.erase(std::find_if(result.rbegin(), result.rend(), [](int ch) { return !std::isspace(ch); }).base(), result.end());
     return result;
 }
 
@@ -185,31 +183,6 @@ void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item)
     }
 }
 
-
-void mys::windRunnerCheck()
-{
-    if (player->HasMagicEffect(my::adrenalineKD)) return;
-
-    float maxHP = u_get_actor_value_max(player, RE::ActorValue::kHealth);
-    float maxST = u_get_actor_value_max(player, RE::ActorValue::kStamina);
-    float maxMP = u_get_actor_value_max(player, RE::ActorValue::kMagicka);
-
-    if (player->HasPerk(windRunnerPerk))
-    {
-        if (player->GetActorValue(RE::ActorValue::kHealth) < maxHP / 2)
-              player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, maxHP * 0.15f);
-        else  player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, maxHP * 0.05f);
-
-        if (player->GetActorValue(RE::ActorValue::kStamina) < maxST / 2)
-              player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, maxST * 0.15f);
-        else  player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, maxST * 0.05f);
-
-        if (player->GetActorValue(RE::ActorValue::kMagicka) < maxMP / 2)
-              player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, maxMP * 0.15f);
-        else  player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, maxMP * 0.05f);
-    }
-}
-
 void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up) 
 {
 
@@ -229,7 +202,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up)
     {
         if (dodge_timer <= 0 && hold_time < 1.0f && !player->HasMagicEffect(dodge_KD_eff) && !hasHeavyArmor && player->HasPerk(dodgePerk)) {
               dodge_timer = 0.78f;
-              windRunnerCheck();
+              gameplay::windRunnerCheck(mys::player);
               u_cast_on_self(dodge_KD_spl, player);
         }
     }
@@ -812,8 +785,9 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
     float manaShield_dmg_delta = 0;
     float convert_dmg_delta = 0;
 
-    RE::Actor* agressor = hit_data.aggressor.get().get();
-    RE::TESObjectWEAP* weap = hit_data.weapon;    
+    auto agressor = hit_data.aggressor.get().get();
+    auto weap     = hit_data.weapon;                        // weap object
+	auto weapRef  = agressor->GetEquippedEntryData(false);  // weap ref for extraData etc.
 
     if (!target || !agressor) return damage;
     LOG("allOnHitEffects___1");
@@ -843,10 +817,6 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
 
     if (weap->HasKeyword(my::sword_1h)  &&  agressor->HasPerk(my::swordFocus1) && !isBlocked && !target->HasMagicEffect(my::injureEff) && !target->HasKeyword(my::actorDwarven)) {
         sword_injure(agressor, target, &hit_data, isPowerAtk);
-    }
-
-    if (weap->HasKeyword(my::silverBurning)) {
-        agressor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::silverBurn, false, target, 1.f, false, 25.f + damage*0.12f, agressor);
     }
 
     if (target->IsPlayerRef())
@@ -907,11 +877,10 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
     {
         LOG("allOnHitEffects___agressor_was_player");
 
-        if (my::oiled_weapon_id->value > 0) {                        // oil
-              gameplay::oil_proc (agressor, target, &hit_data, isPowerAtk);
-              if (agressor->HasMagicEffect(my::oil_frost) && (weap->formID == my::oiled_weapon_id->value)) {
-                  convert_dmg_delta = convert_physDmg_toFrost(target, &hit_data, 0.3f);
-              }
+        if (weapRef && weapRef->IsPoisoned())         // oil
+		{  
+              bool conv = gameplay::oil_proc (agressor, target, &hit_data, isPowerAtk);
+              if (conv) convert_dmg_delta = convert_physDmg_toFrost (target, &hit_data, 0.3f);  // frost oil
         }
         float sf_manaDrain = sf_get_manaDrain();                    //  SF
         if (sf_manaDrain > 0)    {
@@ -1102,105 +1071,6 @@ void msgBoxChoiceCallback (unsigned int result)        // [full automated]  [cal
 }
 
 
-void handle_oil (RE::Actor *pl, RE::EffectSetting *baseEff, bool applyNow)
-{
-    LOG("called handle_oil()");
-     
-}
-
-void check_oil (RE::Actor *pl)
-{
-    LOG("called check_oil()");
-      
-    auto oil_effects = u_get_effects_by_keyword (pl, my::oil_keyword);
-    if (!oil_effects.empty()) {
-        handle_oil (pl, oil_effects.front()->GetBaseObject(), false);
-    }
-    else  // no oil / oil finished
-    {
-        LOG("check_oil_2");
-        auto weap = u_get_weapon(pl, false);
-        if (weap && weap->fullName.contains("+")) {
-            std::string weapName (weap->fullName.c_str());
-            while (weapName.back() != '(') weapName.pop_back();
-            weapName.pop_back();
-            weap->fullName = weapName;
-        }
-    }
-}
-
-namespace gameplay 
-{
-
-   void oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
-   {
-      LOG("called oil_proc");
-      if (!hit_data->weapon) return;
-      if (hit_data->weapon->formID != my::oiled_weapon_id->value) return;        // check that we hit with same weapon that was oiled
-      
-
-	  if (auto weapEntryData = mys::player->GetEquippedEntryData(false)) {
-            if (weapEntryData->IsPoisoned() && weapEntryData->extraLists) {
-                  if (auto extraData = weapEntryData->extraLists->front()) {
-                      if (auto poisonData = extraData->GetByType<RE::ExtraPoison>()) {
-                             auto poison = poisonData->poison;
-                             auto charges = poisonData->count;
-							 // + скалирование магнитуды от charges
-							 // + проверка какой poison
-					  }
-                  }
-            }
-      }
-
-      if (pl->HasMagicEffect(my::oil_silverdust))        // silver oil
-      {
-          float damage = hit_data->totalDamage;
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::silverBurn, false, target, 1.f, false, 25.f + damage*0.12f, pl);
-      }
-      else if (pl->HasMagicEffect(my::oil_disease))   // disease oil
-      {
-          auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // this oil ignores 50% of disease res, so 100% res will make 50% effectiveness
-          float effnss = (1.f - (diseaseRes / 200.f));
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::oil_diseaseOnHit, false, target, effnss, false, 0.f, pl);
-      }
-      else if (pl->HasMagicEffect(my::oil_ignite))    // ignite oil
-      {    
-          u_cast (my::oil_igniteOnHit1, target, pl);                                 // decrease fire res
-          int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
-          if (fireRes < -30) fireRes = -30;
-          int random = rand() % (fireRes+50);
-          if (random < 15) u_cast(my::oil_igniteOnHit2, target, pl);    // ignite %
-      }
-      else if (pl->HasMagicEffect(my::oil_frost))    // frost oil
-      {    
-          // convert dmg is in onHit func..
-          int frostRes = int(target->GetActorValue(RE::ActorValue::kResistFrost));
-          if (frostRes < -10) frostRes = -10;
-          int random = rand() % (frostRes+40);
-          if (random < 10) u_cast(my::oil_frostOnHit, target, pl); 
-      }
-      else if (pl->HasMagicEffect(my::oil_poison))    // poison oil
-      {    
-          float poisonRes = target->GetActorValue(RE::ActorValue::kPoisonResist);
-          if (poisonRes < 0) poisonRes = 0;
-          float effnss = (1.f - (poisonRes / 100.f));
-          int random = rand() % 10;
-          if (random < 4) {
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::oil_poisonOnHit, false, target, effnss, false, 0.f, pl);
-          }
-      }
-      else if (pl->HasMagicEffect(my::oil_garlic))    // garlic oil
-      {    
-          if (target->HasSpell(my::vampirism)) u_cast (my::oil_garlicOnHit, target, pl);
-      }
-      else
-      {
-          my::oiled_weapon_id->value = 0;     // if we haven't any active oil, set checker off
-      }
-   }
-}
-
-
 bool on_drink_potion (RE::Actor* actor, RE::AlchemyItem* potion, RE::ExtraDataList* extra_data_list) 
 {
 
@@ -1226,12 +1096,17 @@ void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int
             auto camera = RE::PlayerCamera::GetSingleton();
             if (camera->IsInFirstPerson()) camera->ForceThirdPerson();  // force camera to 3rd person for oil anim
         }
-        //mys::player->NotifyAnimationGraph("IdleCombatStretchingStart");  // play anim event
-
-		/*std::string effName(baseEff->fullName.c_str());
-         std::string weapName(weap->fullName.c_str());
-         if (!weap->fullName.contains("+"))
-         weap->fullName = weapName + " (+ " + effName + ")";  // example - Wuuthrad (+ Oil:Silverdust) */
+        
+		if (!u_get_pc_poison())
+		{
+            auto weap = u_get_weapon(mys::player, false);  // temp concat name weap (+ oil)
+            if (weap && !weap->fullName.contains("+")) {
+                  std::string weapName(weap->fullName.c_str());
+                  std::string oilName(poison->fullName.c_str());
+                  weap->fullName = weapName + " (+" + oilName + ")";
+            }
+		}
+        mys::player->NotifyAnimationGraph("IdleCombatStretchingStart");  // play anim event
 	}
 }
 
@@ -1310,7 +1185,6 @@ void on_adjust_active_effect(RE::ActiveEffect *eff, float power, bool &unk)
                  eff->duration  *= 0.5f;
               }
         }
-
 
         if (baseEff->HasKeyword(my::dll_check_KW))
         {
@@ -1620,6 +1494,18 @@ void on_death(RE::Actor* victim, RE::Actor* killer)  // event onDeath, called af
     }
 } 
 
+
+inline void reset_weap_name()
+{
+    auto weap = u_get_weapon(mys::player, false);  // return default name
+    if (weap && weap->fullName.contains("+")) {
+        std::string weapName(weap->fullName.c_str());
+        while (weapName.back() != '(') weapName.pop_back();
+        weapName.pop_back();
+        weap->fullName = weapName;
+    }
+}
+
 void my::on_wait()
 {
     LOG("called on_wait()");
@@ -1627,6 +1513,7 @@ void my::on_wait()
     if (poisonData && poisonData->count > 1) {
         poisonData->count = 0;
         u_remove_pc_poison();
+        reset_weap_name();
     }
 }
 
@@ -1665,10 +1552,11 @@ inline void update_oil ()
     if (poisonData) {
          if (poisonData->count > 0) {
                poisonData->count -= 1;
-               RE::DebugNotification(std::to_string(poisonData->count).c_str());  // DEBUG
+               RE::DebugNotification(std::to_string(poisonData->count).c_str());  // DEBUG charges
          } 
 	     else u_remove_pc_poison();
     }
+	else reset_weap_name();
 }
 
 inline void update_gamelog ()
@@ -1745,18 +1633,6 @@ namespace my
     void fill_gamePointers()
     { 
      
-        oil_garlicOnHit = handler->LookupForm<RE::SpellItem>(0x171D9A, "RfaD SSE - Awaken.esp");
-        oil_garlic = handler->LookupForm<RE::EffectSetting>(0x16CC81, "RfaD SSE - Awaken.esp");
-        oil_poisonOnHit = handler->LookupForm<RE::SpellItem>(0x12AE82, "RfaD SSE - Awaken.esp");
-        oil_poison = handler->LookupForm<RE::EffectSetting>(0x16CC7E, "RfaD SSE - Awaken.esp");
-        oil_diseaseOnHit = handler->LookupForm<RE::SpellItem>(0xE9074, "RfaD SSE - Awaken.esp");
-        oil_disease  = handler->LookupForm<RE::EffectSetting>(0xE9071, "RfaD SSE - Awaken.esp");
-        oil_frostOnHit = handler->LookupForm<RE::SpellItem>(0x12FF98, "RfaD SSE - Awaken.esp");
-        oil_frost  = handler->LookupForm<RE::EffectSetting>(0x12FF97, "RfaD SSE - Awaken.esp");
-        oil_ignite  = handler->LookupForm<RE::EffectSetting>(0x12AE7D, "RfaD SSE - Awaken.esp");
-        oil_igniteOnHit1 = handler->LookupForm<RE::SpellItem>(0x12AE7E, "RfaD SSE - Awaken.esp");
-        oil_igniteOnHit2 = handler->LookupForm<RE::SpellItem>(0x12AE80, "RfaD SSE - Awaken.esp");
-        oiled_weapon_id = handler->LookupForm<RE::TESGlobal>(0xCFAEE,  "RfaD SSE - Awaken.esp");
         vamp_state_glob = handler->LookupForm<RE::TESGlobal>(0xB960D3, "RfaD SSE - Awaken.esp");
         snowElf_wears_EnchWeap = handler->LookupForm<RE::TESGlobal>(0xC2E0F0, "RfaD SSE - Awaken.esp");
         nb_hitCounter = handler->LookupForm<RE::TESGlobal>(0xC9D865, "RfaD SSE - Awaken.esp");
@@ -1789,12 +1665,10 @@ namespace my
         nb_main_kd = handler->LookupForm<RE::EffectSetting>(0xDD2991, "RfaD SSE - Awaken.esp");
         bindsInfo_eff = handler->LookupForm<RE::EffectSetting>(0xE5143A, "RfaD SSE - Awaken.esp");
         snowElfEnch = handler->LookupForm<RE::EnchantmentItem>(0x7FBAE8, "RfaD SSE - Awaken.esp");
-        silverBurn    = handler->LookupForm<RE::SpellItem>(0xFA4B56, "RfaD SSE - Awaken.esp");
-        silverBurning = handler->LookupForm<RE::BGSKeyword>(0xFA4B55, "RfaD SSE - Awaken.esp");
+    
         dodgeEffectKW  = handler->LookupForm<RE::BGSKeyword>(0x7B4A92, "RfaD SSE - Awaken.esp");
         arrowReflectKW = handler->LookupForm<RE::BGSKeyword>(0xECADB8, "RfaD SSE - Awaken.esp");
         bindKeyKw = handler->LookupForm<RE::BGSKeyword>(0xE2DCC6, "RfaD SSE - Awaken.esp");
-        oil_silverdust = handler->LookupForm<RE::EffectSetting>(0xCFAEC, "RfaD SSE - Awaken.esp");
         manaShield_2 = handler->LookupForm<RE::EffectSetting>(0x535A3E, "RfaD SSE - Awaken.esp");
         nb_fullReflect = handler->LookupForm<RE::EffectSetting>(0xCA7A98, "RfaD SSE - Awaken.esp");
         manaShield_4_sf = handler->LookupForm<RE::EffectSetting>(0xAE9C9C, "RfaD SSE - Awaken.esp");
@@ -2195,3 +2069,34 @@ float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const 
     return 1.f;
 }
 */
+
+/*
+
+ void CopyTextDisplayData (RE::ExtraTextDisplayData* from, RE::ExtraTextDisplayData* to)
+ {
+    to->displayName = from->displayName;
+    to->displayNameText = from->displayNameText;
+    to->ownerQuest = from->ownerQuest;
+    to->ownerInstance = from->ownerInstance;
+    to->temperFactor = from->temperFactor;
+    to->customNameLength = from->customNameLength;
+}
+
+
+ [[nodiscard]] const bool UpdateExtras (RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_to)
+ {
+	 //....
+
+    if (copy_from->HasType(RE::ExtraDataType::kTextDisplayData)) {
+        auto textdisplaydata = static_cast<RE::ExtraTextDisplayData*>(copy_from->GetByType(RE::ExtraDataType::kTextDisplayData));
+        if (textdisplaydata) {
+            RE::ExtraTextDisplayData* textdisplaydata_fake = RE::BSExtraData::Create<RE::ExtraTextDisplayData>();
+            CopyTextDisplayData(textdisplaydata, textdisplaydata_fake);
+            copy_to->Add(textdisplaydata_fake);
+        } 
+		else return false;
+    }
+ }
+
+ */
+
