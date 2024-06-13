@@ -499,7 +499,7 @@ RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)	// 
          }
     }
     SKSE::log::info("\n----------------------------------------------------------------------------------\n");
-}
+ }
  
 
 namespace Utils_anim_namespace

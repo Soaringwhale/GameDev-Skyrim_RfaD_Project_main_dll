@@ -11,19 +11,36 @@ namespace gameplay
     static RE::SpellItem* oil_frostOnHit;
     static RE::SpellItem* oil_poisonOnHit;
     static RE::SpellItem* oil_garlicOnHit;
-    static RE::AlchemyItem *oil_silver, *oil_garlic, *oil_poison, *oil_frost, *oil_ignite, *oil_disease;
+    static RE::SpellItem* oil_corroseOnHit;
+    static RE::EffectSetting *oil_silver, *oil_garlic, *oil_poison, *oil_frost, *oil_ignite, *oil_disease, *oil_corrose;
+    static RE::EffectSetting *oilGarlicMarker, *oil_KWHolder;
 
-    static RE::SpellItem* silverBurn;
-    static RE::BGSKeyword* silverBurning;
+    static RE::SpellItem *silverBurn;
+    static RE::BGSKeyword *oil_improvedKW, *oil_pureKW;
+    static RE::BGSKeyword* actorTypeUndead;
+    static RE::BGSKeyword* weapMaterialSilver;
 
 	static RE::SpellItem* vampirism;
+    static RE::SpellItem* olveShield;
 
 	static RE::BGSPerk *windRunnerPerk;
+    static RE::BGSPerk *alch_poison_25_perk, *alch_poison_50_perk, *alch_poison_75_perk, *alch_100_perk;
 
+	static RE::BGSSoundDescriptorForm* olvePreShieldVoice;
 
-    bool oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData* hit_data, bool isPwatk);
-    void windRunnerCheck(RE::Actor *pl);
-    void initGameplayPointers();
+	float get_oil_scale_mult (RE::Actor* pl, RE::AlchemyItem* oil);
+    bool  oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData* hit_data, bool isPwatk);
+    void  windRunnerCheck(RE::Actor *pl);
+    void  initGameplayData();
+
+	void bossFightHandle (RE::Actor* boss, int fightID, uint16_t &counter);
+
+	void gmpl_on_micro_update();
+
+	static RE::SpellItem *olveCast, *olvePreShield, *sephCast, *harkonCast; 
+	static RE::Actor *currBoss;
+	static int olveState;
+
 };
 
 
@@ -64,12 +81,14 @@ namespace qst     // newstart quests
     static RE::TESGlobal *isVigharDead, *isMarkDead, *isWilhelmDead;
     static RE::TESGlobal *isReaperDead, *isSiltineDead, *isAnachoretDead;
     static RE::TESGlobal *stonesBuffStopDay;
+    static RE::TESGlobal *castleMagesKilled;
+    static RE::TESGlobal *ambassadorsKilled;
+    static RE::TESGlobal *contractsDone;
 
     static RE::TESFaction* dawnguardHunters;
     static RE::TESFaction* mythicDawnCultist;
     static RE::TESFaction* chihNamiraCult1;
     static RE::TESFaction* chihNamiraCult2;
-    static RE::TESFaction* castleMageFaction;
 
     static RE::BGSPerk* cult_azura_2;
     static RE::BGSPerk* cult_vermina_2;

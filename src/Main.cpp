@@ -8,7 +8,7 @@
 //#include "PCH.h"
 
 
-static float upd_timer = 1.5f;
+static float upd_timer = 2.0f;   // 2 sec
 
 struct OnPlayerUpdate_Hook final
 {
@@ -24,9 +24,16 @@ public:
       
         mys::time_delta = delta;        // for other functions
 
-        upd_timer -= delta;                            
+		mys::micro_timer -= delta;
+        upd_timer -= delta;
+
+		//if (mys::micro_timer <= 0.f) {
+        //    mys::micro_timer = 1.f;
+        //    on_micro_update();           // every 1 sec
+        //}
+
         if (upd_timer <= 0.f) {
-            upd_timer = 1.5f;            // some onupdate func every 2 sec
+            upd_timer = 2.0f;            // every 2 sec
             on_my_update();
         }
         return old_func(player_, delta);
@@ -403,7 +410,7 @@ class OnManaPercentRegen_Hook
        if (mys::reserved_MP > 0.f && actor->IsPlayerRef()) {
            value = check_MP(value);
        }
-       return old_func(actor, av, value);
+       old_func(actor, av, value);
     }
 
     static inline REL::Relocation<decltype(new_func)> old_func;
@@ -421,13 +428,18 @@ public:
 private:
     static void new_func(RE::ValueModifierEffect* this_, RE::Actor* actor, float value, RE::ActorValue av)
     {
-       if (mys::reserved_MP > 0.f && actor->IsPlayerRef() && this_->actorValue == RE::ActorValue::kMagicka) {
-           if (this_->effect->baseEffect->IsDetrimental() || this_->effect->baseEffect->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover)) {
-               old_func(this_, actor, value, av);  //  если эффект detrimental или recover, то пропускаем их как обычно т.к. это макс. мана/урон мане, резерв не должен их трогать
-               my::sf_handle_reserved_MP();           //  перерасчитываем ману
+       if (mys::reserved_MP > 0.f && actor->IsPlayerRef() && this_->actorValue == RE::ActorValue::kMagicka) {      // без бафов на резерв маны не уйдем дальше проверки mys::reserved_MP > 0
+           if (this_->effect->baseEffect->IsDetrimental()) {
+               old_func(this_, actor, value, av);  //  если эффект detrimental, вообще не трогаем
                return;
            }
-               this_->magnitude = check_MP(this_->magnitude);
+		   else if (this_->effect->baseEffect->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover)) {
+                // если recover, то пропускаем как обычно т.к. это не реген, а например шмотка на макс. ману
+               old_func(this_, actor, value, av);
+               my::sf_handle_reserved_MP();          // возможно придется пересчитать текущую ману относительно максимальной (можно сократить этот метод)
+               return;
+           }
+           this_->magnitude = check_MP(this_->magnitude);
        }
        old_func(this_, actor, value, av);
     }
@@ -460,15 +472,6 @@ class OnModPeakActorValue_Hook
 
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
-
-
-void my::install_new_hooks()
-{
-    SKSE::log::info("called install_new_hooks()");
-    OnManaPercentRegen_Hook::install_hook();
-    OnModActorValue_Hook::install_hook();
-    OnModPeakActorValue_Hook::install_hook();
-}
 
 using ActorKillev = RE::ActorKill::Event;
 
@@ -524,7 +527,7 @@ public:
 
 //------------------------------------------------------ for descriptions --------------------------
 
-namespace pch
+namespace pch_
 {
     template <class T>
     void write_thunk_call (std::uintptr_t a_src)
@@ -556,23 +559,23 @@ namespace description_hooks
             static inline void install_hook()
             {
                 REL::Relocation<std::uintptr_t> target { RELOCATION_ID(50005, 50949), REL::VariantOffset(0x80, 0x80, 0x80) };            
-                pch::write_thunk_call<ItemCardPopulateHook>(target.address());
+                pch_::write_thunk_call<ItemCardPopulateHook>(target.address());
 
                 REL::Relocation<std::uintptr_t> target2 { RELOCATION_ID(50201, 51130), REL::VariantOffset(0xB2, 0xB2, 0xB2) };
-                pch::write_thunk_call<ItemCardPopulateHook>(target2.address());
+                pch_::write_thunk_call<ItemCardPopulateHook>(target2.address());
 
                 REL::Relocation<std::uintptr_t> target3 { RELOCATION_ID(50297, 51218), REL::VariantOffset(0x35, 0x35, 0x35) };
-                pch::write_thunk_call<ItemCardPopulateHook>(target3.address());
+                pch_::write_thunk_call<ItemCardPopulateHook>(target3.address());
 
                 REL::Relocation<std::uintptr_t> target4 { RELOCATION_ID(50674, 51569), REL::VariantOffset(0x80, 0x7A, 0x80) };
-                pch::write_thunk_call<ItemCardPopulateHook>(target4.address());
+                pch_::write_thunk_call<ItemCardPopulateHook>(target4.address());
 
                 REL::Relocation<std::uintptr_t> target5 { RELOCATION_ID(50973, 51852), REL::VariantOffset(0x80, 0x7A, 0x80) };
-                pch::write_thunk_call<ItemCardPopulateHook>(target5.address());
+                pch_::write_thunk_call<ItemCardPopulateHook>(target5.address());
 
                 if (REL::Module::IsAE()) {
                     REL::Relocation<std::uintptr_t> target6 { RELOCATION_ID(0, 51458), REL::VariantOffset(0x0, 0x87, 0x0) };
-                    pch::write_thunk_call<ItemCardPopulateHook>(target6.address());
+                    pch_::write_thunk_call<ItemCardPopulateHook>(target6.address());
                 }
             }
         };
@@ -592,10 +595,10 @@ namespace description_hooks
             static inline void install_hook()
             {
                 REL::Relocation<std::uintptr_t> target { RELOCATION_ID(50298, 51219), REL::VariantOffset(0x32, 0x32, 0x32) };
-                pch::write_thunk_call<ItemCardPopulateHook2>(target.address());
+                pch_::write_thunk_call<ItemCardPopulateHook2>(target.address());
 
                 REL::Relocation<std::uintptr_t> target2 { RELOCATION_ID(51152, 52032), REL::VariantOffset(0x8F, 0x8F, 0x8B) };
-                pch::write_thunk_call<ItemCardPopulateHook2>(target2.address());
+                pch_::write_thunk_call<ItemCardPopulateHook2>(target2.address());
             }
         };
     }
@@ -851,7 +854,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
     switch (message->type) {
         case SKSE::MessagingInterface::kDataLoaded:            // All ESM/ESL/ESP plugins have loaded, main menu is now active. It is now safe to access form data
-           my::initObjects();
+           my::initGameData();
            mys::init_globs();
            OnPlayerUpdate_Hook::install_hook();
            PhysDamageToActor_Hook::install_hook();
@@ -873,7 +876,11 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
            InputWatcher::GetSingleton()->enable();            // key press event
            OnDeathEvent::GetSingleton()->enable();            // on  death event
            MenuOpenCloseEventSink::GetSingleton()->enable();  // open/close menu event
-           description_hooks::Install_Hooks();
+
+		   OnManaPercentRegen_Hook::install_hook();
+           OnModActorValue_Hook::install_hook();
+           OnModPeakActorValue_Hook::install_hook();
+           description_hooks::Install_Hooks();   // must be last
            break;
         case SKSE::MessagingInterface::kPostLoadGame:        // Player's selected save game has finished loading
            my::sf_handle_reserved_MP();

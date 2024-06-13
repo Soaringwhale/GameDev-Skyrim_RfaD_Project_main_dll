@@ -8,8 +8,21 @@
 #include "core.h"
 
 
+
+
+
 namespace gameplay 
 {
+
+   float get_oil_scale_mult (RE::Actor* pl, RE::AlchemyItem* oil)
+   {
+	   float mult = 1.f;
+       if (pl->HasPerk(alch_poison_25_perk)) mult *= (1.f + (pl->GetActorValue(RE::ActorValue::kAlchemy) * 0.01f));
+       if (pl->HasPerk(alch_100_perk))       mult *= 1.2f;
+       if (oil->HasKeyword(oil_improvedKW))  mult *= 1.2f;
+       else if (oil->HasKeyword(oil_pureKW)) mult *= 1.4f;
+       return mult;
+   }
 
    bool oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
    {
@@ -17,48 +30,91 @@ namespace gameplay
 	  
 	  auto poisonData = u_get_pc_poison();
       if (!poisonData) return false;
-      auto oil_id = poisonData->poison->formID;
+      auto oil = poisonData->poison;                             // alchItem oil
+	  if (!oil || oil->effects.empty()) return false;
+	  auto oil_id = oil->effects[0]->baseEffect->formID;         // id of effectSetting
+	  
+      float charges = float(poisonData->count);
+      float max_charge = pl->HasPerk(alch_poison_50_perk) ? 180.f : 120.f;      // max charge depends on perk and oil grade
 
-      if (oil_id == oil_silver->formID)        // silver oil
+	  float ef = 1.f;
+
+	  if (oil->HasKeyword(oil_improvedKW)) {
+          max_charge += 30.f;                                     //  improved oils
+          ef += 0.2f;
+      }
+      else if (oil->HasKeyword(oil_pureKW)) {
+          max_charge += 60.f;                                     //  pure oils
+          ef += 0.4f;
+      }
+
+      float part = charges/max_charge;       // for ex 90/120 charges remained, part = 0.75
+      float debuff = (1-part)*0.8f;          // (1 - 0.75)/*0.8 = 0.2
+      if (pl->HasPerk(alch_poison_50_perk)) debuff *= 0.7f;   // decrease debuff with perk
+      
+      ef -= debuff;  // 1 - 0.2 = 0.8  (charge-dependent debuff)
+
+	  //LOG("oil_proc: charges remain - {}, part - {}, debuff - {}, charge-dependent efficiency - {}", charges, part, debuff, ef);
+
+      if (oil_id == oil_silver->formID)    // silver oil
       {
-          float damage = hit_data->totalDamage;
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverBurn, false, target, 1.f, false, 25.f + damage*0.12f, pl);
+		  if (target->HasKeyword(actorTypeUndead))
+		  {
+              float realMagn = 5.1f * get_oil_scale_mult(pl, oil);      // 100 alch + all perks will make ~17
+              if (!hit_data->weapon->HasKeyword(weapMaterialSilver))
+			  {
+                  hit_data->totalDamage *= (1.f + realMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
+              }
+              float dotDmg = realMagn + (hit_data->totalDamage * 0.05f);  // 17 + 5% of dmg
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverBurn, false, target, 1.f, false, dotDmg*ef, pl);
+		  }
       }
       else if (oil_id == oil_disease->formID)   // disease oil
       {
           auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // ignores 50% of disease res, 100% res will make 50% effnss
           float effnss = (1.f - (diseaseRes / 200.f));
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss, false, 0.f, pl);
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss*ef, false, 0.f, pl);
       }
       else if (oil_id == oil_ignite->formID)    // ignite oil
-      {    
-          u_cast (oil_igniteOnHit1, target, pl);                                 // decrease fire res
+      {   
+		  // decrease fire res
+	      pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0.f, pl);                 
           int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
           if (fireRes < -30) fireRes = -30;
           int random = rand() % (fireRes+50);
-          if (random < 15) u_cast(oil_igniteOnHit2, target, pl);    // ignite %
+          if (random < 15)   // ignite chance
+			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit2, false, target, ef, false, 0.f, pl);
       }
       else if (oil_id == oil_frost->formID)     // frost oil
       {    
           int frostRes = int(target->GetActorValue(RE::ActorValue::kResistFrost));
           if (frostRes < -10) frostRes = -10;
           int random = rand() % (frostRes+40);
-          if (random < 10) u_cast (oil_frostOnHit, target, pl); 
-		  return true;                                            // convert dmg to frost in core.cpp
+          if (random < 10 && !target->HasMagicEffect(oil_KWHolder))
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_frostOnHit, false, target, ef, false, 0.f, pl);
+		  return true;   // convert dmg to frost in core.cpp
       }
       else if (oil_id == oil_poison->formID)     // poison oil
       {    
           float poisonRes = target->GetActorValue(RE::ActorValue::kPoisonResist);
-          if (poisonRes < 0) poisonRes = 0;
+          if (poisonRes < -25.f) poisonRes = -25.f;
           float effnss = (1.f - (poisonRes / 100.f));
           int random = rand() % 10;
           if (random < 4) {
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss, false, 0.f, pl);
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss*ef, false, 0.f, pl);
           }
       }
       else if (oil_id == oil_garlic->formID)    // garlic oil
       {    
-          if (target->HasSpell(vampirism)) u_cast (oil_garlicOnHit, target, pl);
+          if (target->HasSpell(vampirism) && !target->HasMagicEffect(oilGarlicMarker))
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_garlicOnHit, false, target, ef, false, 0.f, pl);
+      }
+	  else if (oil_id == oil_corrose->formID)    // corrose oil
+      {    
+		  float realMagn = 0.03f * get_oil_scale_mult(pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
+          float armorDmg = target->GetActorValue(RE::ActorValue::kDamageResist) * realMagn;     
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_corroseOnHit, false, target, ef, false, armorDmg, pl);
+          hit_data->totalDamage *= (1.f - realMagn);  // reduce dmg, for ex *= 0.9
       }
       
       return false;
@@ -88,8 +144,56 @@ namespace gameplay
       }
    }
 
+   void bossFightHandle (RE::Actor *boss, int fightID, uint16_t& counter)        //  works onUpdate
+   {
+      LOG("called gameplay::bossFightHandle()");
+      if (!boss || !boss->IsInCombat()) return;
 
-   void initGameplayPointers()
+	  counter++;
+
+      if (counter > 50) {
+          counter = 0;
+          return;
+      }
+
+      currBoss = boss;    // field
+
+      if (fightID == 1)  // olve   // make enum
+      {
+          if (olveState == 0 && counter >= 6)  // pre-shield / 12 sec
+          {
+              //u_playSound(mys::player, olvePreShieldVoice, 2.f);
+              u_cast_on_self(olvePreShield, currBoss);
+              olveState = 1;
+              counter = 0;
+          }
+		  else if (olveState == 1 && counter >= 7)   // expl / 14 sec
+		  {
+              u_cast_on_self(olveCast, currBoss);
+              olveState = 0;
+              counter = 0; 
+		  }
+      }
+	  else if (fightID == 2)  // sephiroth
+	  {
+		  if (counter >= 14)  // 28 sec
+		  {
+              u_cast_on_self(sephCast, currBoss);
+              counter = 0;
+		  } 
+	  }
+   }
+
+
+   void gmpl_on_micro_update()   // every 1 sec
+   {
+      if (olveState == 1) {                              // olve shield
+          //u_cast_on_self(olveShield, currBoss);
+          //olveState = 2;
+      }
+   }
+
+   void initGameplayData()
    {
 
       auto handler = RE::TESDataHandler::GetSingleton();
@@ -100,19 +204,43 @@ namespace gameplay
       oil_frostOnHit = handler->LookupForm<RE::SpellItem>(0x12FF98, "RfaD SSE - Awaken.esp");
       oil_igniteOnHit1 = handler->LookupForm<RE::SpellItem>(0x12AE7E, "RfaD SSE - Awaken.esp");
       oil_igniteOnHit2 = handler->LookupForm<RE::SpellItem>(0x12AE80, "RfaD SSE - Awaken.esp");
+      oil_corroseOnHit = handler->LookupForm<RE::SpellItem>(0x2233B9, "RfaD SSE - Awaken.esp");
 
-	  oil_silver  = handler->LookupForm<RE::AlchemyItem>(0xCFAEA,  "RfaD SSE - Awaken.esp");
-      oil_disease = handler->LookupForm<RE::AlchemyItem>(0xE906F,  "RfaD SSE - Awaken.esp");
-      oil_frost   = handler->LookupForm<RE::AlchemyItem>(0x12AE84, "RfaD SSE - Awaken.esp");
-	  oil_garlic  = handler->LookupForm<RE::AlchemyItem>(0x16CC7F, "RfaD SSE - Awaken.esp");
-	  oil_ignite  = handler->LookupForm<RE::AlchemyItem>(0x12AE7B, "RfaD SSE - Awaken.esp");
-	  oil_poison  = handler->LookupForm<RE::AlchemyItem>(0x12AE86, "RfaD SSE - Awaken.esp");
+	  oil_silver  = handler->LookupForm<RE::EffectSetting>(0xCFAEC,  "RfaD SSE - Awaken.esp");
+      oil_disease = handler->LookupForm<RE::EffectSetting>(0xE9071,  "RfaD SSE - Awaken.esp");
+      oil_frost   = handler->LookupForm<RE::EffectSetting>(0x12FF97, "RfaD SSE - Awaken.esp");
+	  oil_garlic  = handler->LookupForm<RE::EffectSetting>(0x16CC81, "RfaD SSE - Awaken.esp");
+	  oil_ignite  = handler->LookupForm<RE::EffectSetting>(0x12AE7D, "RfaD SSE - Awaken.esp");
+	  oil_poison  = handler->LookupForm<RE::EffectSetting>(0x16CC7E, "RfaD SSE - Awaken.esp");
+      oil_corrose = handler->LookupForm<RE::EffectSetting>(0x21913B, "RfaD SSE - Awaken.esp");
+
+	  oilGarlicMarker = handler->LookupForm<RE::EffectSetting>(0x2284D0, "RfaD SSE - Awaken.esp");
+      oil_KWHolder    = handler->LookupForm<RE::EffectSetting>(0x1FFBCA, "RfaD SSE - Awaken.esp");
+	  oil_improvedKW  = handler->LookupForm<RE::BGSKeyword>(0x21912E, "RfaD SSE - Awaken.esp");
+      oil_pureKW      = handler->LookupForm<RE::BGSKeyword>(0x21E298, "RfaD SSE - Awaken.esp");
+
+	  
 
 	  silverBurn = handler->LookupForm<RE::SpellItem>(0xFA4B56, "RfaD SSE - Awaken.esp");
-      silverBurning = handler->LookupForm<RE::BGSKeyword>(0xFA4B55, "RfaD SSE - Awaken.esp");
+  
+	  olveShield = handler->LookupForm<RE::SpellItem>(0xD01250, "RfaD SSE - Awaken.esp");
 
+	  olvePreShieldVoice = handler->LookupForm<RE::BGSSoundDescriptorForm>(0xAFE0DC, "RfaD SSE - Awaken.esp");
+      
 	  vampirism = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);
       windRunnerPerk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F22);
+      alch_poison_25_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F2F);
+      alch_poison_50_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F2C);
+      alch_poison_75_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x58217);
+      alch_100_perk       = RE::TESForm::LookupByID<RE::BGSPerk>(0x58218); 
+	  actorTypeUndead     = RE::TESForm::LookupByID<RE::BGSKeyword>(0x13796);
+      weapMaterialSilver  = RE::TESForm::LookupByID<RE::BGSKeyword>(0x10AA1A);
+
+	  olvePreShield = handler->LookupForm<RE::SpellItem>(0x1F0890, "RfaD SSE - Awaken.esp");
+	  olveCast = handler->LookupForm<RE::SpellItem>(0x1C7FFC, "RfaD SSE - Awaken.esp");
+      sephCast = handler->LookupForm<RE::SpellItem>(0x1EB778, "RfaD SSE - Awaken.esp");
+	  currBoss = nullptr;
+	  olveState = 0;
    }
 }
 
@@ -173,11 +301,13 @@ namespace qst
         isAnachoretDead = handler->LookupForm<RE::TESGlobal>(0xA2128, "RfaD SSE - Awaken.esp");
         isNamiraBossDead = handler->LookupForm<RE::TESGlobal>(0x2B99A6, "ChihSkillTree.esp");
 
+		contractsDone = handler->LookupForm<RE::TESGlobal>(0x1B3BA9, "RfaD SSE - Awaken.esp");
+		castleMagesKilled = handler->LookupForm<RE::TESGlobal>(0x19A64C, "RfaD SSE - Awaken.esp");
+        ambassadorsKilled = handler->LookupForm<RE::TESGlobal>(0x288948, "RfaD SSE - Awaken.esp");
         stonesBuffStopDay = handler->LookupForm<RE::TESGlobal>(0x6D0994, "devFixes.esp");
         aedraToken = handler->LookupForm<RE::BGSPerk>(0xE460B, "Requiem for a Dream - DivineBlessings.esp");
         daedraToken = handler->LookupForm<RE::BGSPerk>(0xE460C, "Requiem for a Dream - DivineBlessings.esp");
 
-        castleMageFaction = handler->LookupForm<RE::TESFaction>(0x90AF43, "devFixes.esp");
         chihNamiraCult1 = handler->LookupForm<RE::TESFaction>(0x2F6CEE, "ChihSkillTree.esp");
         chihNamiraCult2 = handler->LookupForm<RE::TESFaction>(0x2F6CEF, "ChihSkillTree.esp");
         mythicDawnCultist = handler->LookupForm<RE::TESFaction>(0x14C51, "RfaD SSE - Awaken.esp");
@@ -205,15 +335,14 @@ namespace qst
         
     void check_onDeath_questGoals (RE::Actor *victim)
     {
+        auto id = victim->formID;
+
         if (qst::startDB->currentStage == 40) {
                  if (victim->IsInFaction(RE::TESForm::LookupByID<RE::TESFaction>(0x86EEE)))  qst::currGoalVal->value += 1;  // guard faction
         }
-        else if (qst::startDB->currentStage == 50) {
-                 if (victim->IsInFaction(qst::castleMageFaction)) qst::currGoalVal->value += 1;   // castle mages
-        }
         else if (qst::startDB->currentStage == 60) {
-                 if (victim->formID == 0x133AF || victim->formID == 0x1E7D7 ||    // ambassadors (elenwen, ancarion, ancano, ondolemar)
-                     victim->formID == 0x13269 || victim->formID == 0x0401CAF3)  qst::currGoalVal->value += 1;
+                 // ambassadors (elenwen, ancarion, ancano, ondolemar)
+                 if (id == 0x133AF || id == 0x1E7D7 || id == 0x13269 || id == 0x0401CAF3) qst::currGoalVal->value += 1;               
         }
         else if (qst::startMerc->currentStage == 40) {
                  if (victim->HasSpell(qst::mercTraining) || victim->HasSpell(qst::bldHorkerTraining)) qst::currGoalVal->value += 1;  // mercenaries
@@ -240,9 +369,9 @@ namespace qst
                    victim->IsInFaction(RE::TESForm::LookupByID<RE::TESFaction>(0xE953D)) ||  // namira canniball attack
                    victim->IsInFaction(RE::TESForm::LookupByID<RE::TESFaction>(0x7A509)) ||  // vaermina nightcaller temple
                    victim->IsInFaction(qst::chihNamiraCult1) || victim->IsInFaction(qst::chihNamiraCult2))  // chih namira canal factions
-                   { qst::currGoalVal->value += 1; }
-            }
-     }
+            { qst::currGoalVal->value += 1; }
+        }
+    }
 };
 
 
@@ -256,13 +385,13 @@ int qMisc (std::string statName)
 void setStage (RE::TESQuest* quest, uint16_t stage) { LOG("called setstage({})", stage); u_setStage(quest, stage); }
 
 float  getContractsDone () { 
-    qst::currGoalVal->value = mys::player->GetActorValue(RE::ActorValue::kFavorsPerDay);
+    qst::currGoalVal->value = qst::contractsDone->value;
     return qst::currGoalVal->value;
 }
 
 bool vigharMovarthDead() { return (qst::isVigharDead->value > 0 && qst::MS14->currentStage > 100); }
 
-bool contractsDone() { return (qst::DBc1->currentStage>20 && qst::DBc2->currentStage>20 && qst::DBc3->currentStage>20);}
+bool dbcontractsDone() { return (qst::DBc1->currentStage>20 && qst::DBc2->currentStage>20 && qst::DBc3->currentStage>20);}
 
 bool vampArtifacts() { return (qst::DLC1RV08->currentStage >= 200 && qst::DLC1RV09->currentStage >= 200); }
 
@@ -314,12 +443,12 @@ int priestsHelped ()
 int tombQuestsDone ()
 {
     int x = 0;
-    if (qst::deathBrandQuest->currentStage > 90)  x++;                             // DLC2dunHaknirTreasureQST (Haknir)
+    if (qst::deathBrandQuest->currentStage > 90)  x++;                           // DLC2dunHaknirTreasureQST (Haknir)
     if (qst::azidalQuest->currentStage     > 475) x++;                           // DLC2dunKolbjornQST (Azidal)
     if (qst::zakrisosQuest->currentStage   > 50)  x++;                           // DLC2RR03 (Zakrisos)
-    if (qst::valokQuest->currentStage       > 50)  x++;                           // DLC2SV01 (Valok)
+    if (qst::valokQuest->currentStage       > 50)  x++;                          // DLC2SV01 (Valok)
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x7EDE5)->currentStage > 70) x++;  // dunAngarvundeQST
-    if (RE::TESForm::LookupByID<RE::TESQuest>(0x35354)->currentStage > 70) x++;     // dunForelhostQST
+    if (RE::TESForm::LookupByID<RE::TESQuest>(0x35354)->currentStage > 70) x++;  // dunForelhostQST
     if (RE::TESForm::LookupByID<RE::TESQuest>(0xD9B63)->currentStage > 30) x++;  // FreeformIvarstead01
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x1F252)->currentStage > 70) x++;  // MG02
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x6CD54)->currentStage > 80) x++;  // dunIronbindQST (Gatrik)
@@ -423,6 +552,18 @@ int vampire_dust_have() {
     return qst::currGoalVal->value;
 }
 
+int castle_mages_killed()
+{
+    qst::currGoalVal->value = qst::castleMagesKilled->value;
+    return qst::currGoalVal->value;
+}
+
+int ambassadors_killed()
+{
+    qst::currGoalVal->value = qst::ambassadorsKilled->value;
+    return qst::currGoalVal->value;
+}
+
 int daedra_guards_killed ()
 {
     int x = 0;
@@ -492,16 +633,19 @@ bool chosenDaedra_fullPerks_n_quest()
 void check_horseCert()
 {
     auto certificate = qst::handler->LookupForm<RE::TESObjectBOOK>(0x8C3A8A, "devFixes.esp");
+    auto horsecost = RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD);
+    auto stablesquest = RE::TESForm::LookupByID<RE::TESQuest>(0x68D73);
     if (u_get_item_count(mys::player, certificate->formID) > 0)  // if have cert
     {
         if (u_get_game_statistic("Horses Owned") > 0)        // and bought horse
-    {
-             RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 2500.f;                                // price = 2500
+        {
+             horsecost->value = 2500.f;                                // price = 2500
              mys::player->RemoveItem(certificate, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);     // remove cert
         }
-        else RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 0.f;  // have cert but haven't bought a horse yet = price 0
+        else horsecost->value = 0.f;  // have cert but haven't bought a horse yet = price 0
     }
-    else RE::TESForm::LookupByID<RE::TESGlobal>(0xF49BD)->value = 2500.f;   // have no cert = price 2500
+    else horsecost->value = 2500.f;   // have no cert = price 2500
+    u_updQuestTextGlob(stablesquest, horsecost);
 }
 
 namespace qst
@@ -513,44 +657,44 @@ namespace qst
     {
         auto this_ = qst::startTravel;
         auto stage = qst::startTravel->currentStage;
-        if    (stage == 1  && qst::stonesBuffStopDay->value)                setStage(this_, 10);  // [1] touch stone
-        else if (stage == 10 && u_is_in_city(player))                    setStage(this_, 20);  // [2] travel to city     
+        if    (stage == 1  && qst::stonesBuffStopDay->value)            setStage(this_, 10);  // [1] touch stone
+        else if (stage == 10 && u_is_in_city(player))                   setStage(this_, 20);  // [2] travel to city     
         else if (stage == 20 && qMisc("Misc Objectives Completed") > 9) setStage(this_, 30);  // [3] misc quests x10     
         else if (stage == 30 && qMisc("Ingredients Harvested") > 149)   setStage(this_, 40);  // [4] harvested  x150
         else if (stage == 40 && qMisc("Side Quests Completed") > 2)     setStage(this_, 50);  // [5] side quests x3
-        else if (stage == 50 && qMisc("Nirnroots Found") > 29)            setStage(this_, 60);  // [6] nirnroots x30
+        else if (stage == 50 && qMisc("Nirnroots Found") > 29)          setStage(this_, 60);  // [6] nirnroots x30
         else if (stage == 60 && qMisc("Side Quests Completed") > 5)     setStage(this_, 70);  // [7] side quests x6 
         else if (stage == 70 && qMisc("Words Of Power Learned") > 14)   setStage(this_, 80);  // [8] words of power x15
-        else if (stage == 80 && priestMasksFound() > 9)                    setStage(this_, 90);  // [9] priest masks    x10
-        else if (stage == 90 && blackBooksDone() > 5)                    setStage(this_, 100); // [10] black books x6
+        else if (stage == 80 && priestMasksFound() > 9)                 setStage(this_, 90);  // [9] priest masks    x10
+        else if (stage == 90 && blackBooksDone() > 5)                   setStage(this_, 100); // [10] black books x6
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startMerc->currentStage > 0)            //  [MERCENARY]
     {
         auto this_ = qst::startMerc;
         auto stage = qst::startMerc->currentStage;
-        //        (stage == 1  && witch reward_taken)                                             // [1] reward for witch
-        if        (stage == 10 && getContractsDone() > 4)                   setStage(this_, 20);  // [2] contrtacts x5
+        //      (stage == 1  && witch reward_taken)                                          // [1] reward for witch
+        if      (stage == 10 && getContractsDone() > 2)                setStage(this_, 20);  // [2] contrtacts x3
         else if (stage == 20 && qst::StalleoQuest->currentStage > 60)  setStage(this_, 30);  // [3] stalleo quest
-        else if (stage == 30 && getContractsDone()   > 19)               setStage(this_, 40);  // [4] contracts x15
-        else if (stage == 40 && qst::currGoalVal->value > 14)           setStage(this_, 50);  // [5] slay mercs x15
+        else if (stage == 30 && getContractsDone()   > 19)             setStage(this_, 40);  // [4] contracts x20
+        else if (stage == 40 && qst::currGoalVal->value > 14)          setStage(this_, 50);  // [5] slay mercs x15
         else if (stage == 50 && qMisc("Dungeons Cleared") > 39)        setStage(this_, 60);  // [6] dungeons clear x40
         else if (stage == 60 && getContractsDone() > 44)               setStage(this_, 70);  // [7] contracts x45
         else if (stage == 70 && qst::DLC2RR02->currentStage > 110)     setStage(this_, 80);  // [8] raven_rock
-        else if (stage == 80 && tombQuestsDone() > 11)                   setStage(this_, 90);  // [9] thomb quests x12
+        else if (stage == 80 && tombQuestsDone() > 11)                 setStage(this_, 90);  // [9] thomb quests x12
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startPal->currentStage > 0)        //  [PALADIN]
     {
         auto this_ = qst::startPal;
         auto stage = qst::startPal->currentStage;
-        if        (stage == 1  && player->HasPerk(qst::aedraToken))   setStage(this_, 10);   // [1] take bless
+        if        (stage == 1  && player->HasPerk(qst::aedraToken)) setStage(this_, 10);   // [1] take bless
         else if (stage == 10 && citizenHelped() > 9)                setStage(this_, 20);   // [2] help citizen x10
         else if (stage == 20 && qst::DBDestroy->currentStage > 30)  setStage(this_, 30);   // [3] destroy DB
         else if (stage == 30 && priestsHelped() > 4)                setStage(this_, 40);   // [4] help priests x5
-        else if (stage == 40 && qst::DA10->currentStage > 65)        setStage(this_, 50);   // [5] help tyranus
-      //else if (stage == 50 && ring_paladin_papyrus)                setStage(this_, 60);   // [6] ring of paladin
-        else if (stage == 60 && qst::currGoalVal->value > 14)        setStage(this_, 70);   // [7] slay necrs x15
+        else if (stage == 40 && qst::DA10->currentStage > 65)       setStage(this_, 50);   // [5] help tyranus
+      //else if (stage == 50 && ring_paladin_papyrus)               setStage(this_, 60);   // [6] ring of paladin
+        else if (stage == 60 && qst::currGoalVal->value > 14)       setStage(this_, 70);   // [7] slay necrs x15
         else if (stage == 70 && qst::isAnachoretDead->value > 0)    setStage(this_, 80);   // [8] anachoret
         else if (stage == 80 && essence_found() > 2)                setStage(this_, 90);   // [9] find 3 essence
         u_updQuestTextGlob(this_, qst::currGoalVal);
@@ -575,13 +719,13 @@ namespace qst
     {
         auto this_ = qst::startDB;
         auto stage = qst::startDB->currentStage;
-        if        (stage == 1  && contractsDone())                  setStage(this_, 10);  // [1] contracts
+        if      (stage == 1  && dbcontractsDone())                setStage(this_, 10);  // [1] contracts
         else if (stage == 10 && qMisc("Poisons Mixed") > 29)      setStage(this_, 20);  // [2] poisons x30
-        else if (stage == 20 && qMisc("Murders") > 9)              setStage(this_, 30);  // [3] peaceful x10
+        else if (stage == 20 && qMisc("Murders") > 9)             setStage(this_, 30);  // [3] peaceful x10
         else if (stage == 30 && qMisc("People Killed") > 59)      setStage(this_, 40);  // [4] enemies x60
-        else if (stage == 40 && qst::currGoalVal->value > 29)      setStage(this_, 50);  // [5] guards x30
-        else if (stage == 50 && qst::currGoalVal->value > 3)      setStage(this_, 60);  // [6] castle mage x4
-        else if (stage == 60 && qst::currGoalVal->value > 2)      setStage(this_, 70);  // [7] ambassador x3
+        else if (stage == 40 && qst::currGoalVal->value > 29)     setStage(this_, 50);  // [5] guards x30
+        else if (stage == 50 && castle_mages_killed() > 3)        setStage(this_, 60);  // [6] castle mage x4
+        else if (stage == 60 && ambassadors_killed()  > 2)        setStage(this_, 70);  // [7] ambassador x3
         else if (stage == 70 && qst::DLC2RR02->currentStage >90)  setStage(this_, 80);  // [8] morag tong
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
@@ -589,11 +733,11 @@ namespace qst
     {
             auto this_ = qst::startVamp;
             auto stage = qst::startVamp->currentStage;
-      //if      (stage == 1  && phials papyrus)                      setStage(this_, 10);   // [1] phials
-        if        (stage == 10 && qst::currGoalVal->value > 9)      setStage(this_, 20);   // [2] feed x10
-        else if (stage == 20 && qst::isMarkDead->value > 0)          setStage(this_, 30);   // [3] slay Mark
-        else if (stage == 30 && qst::isWilhelmDead->value > 0)      setStage(this_, 40);   // [4] slay Wilhelm
-        else if (stage == 40 && qst::currGoalVal->value > 19)      setStage(this_, 50);   // [5] vampires x20
+      //if      (stage == 1  && phials papyrus)                   setStage(this_, 10);   // [1] phials
+        if      (stage == 10 && qst::currGoalVal->value > 9)      setStage(this_, 20);   // [2] feed x10
+        else if (stage == 20 && qst::isMarkDead->value > 0)       setStage(this_, 30);   // [3] slay Mark
+        else if (stage == 30 && qst::isWilhelmDead->value > 0)    setStage(this_, 40);   // [4] slay Wilhelm
+        else if (stage == 40 && qst::currGoalVal->value > 19)     setStage(this_, 50);   // [5] vampires x20
         else if (stage == 50 && qst::currGoalVal->value > 9)      setStage(this_, 60);   // [6] dawnguards x10
         else if (stage == 60 && vampArtifacts())                  setStage(this_, 70);   // [7] artifacts x4
         else if (stage == 70 && vigharMovarthDead())              setStage(this_, 80);   // [8] vighar & movart
@@ -604,29 +748,29 @@ namespace qst
     {
         auto this_ = qst::startMage;
         auto stage = qst::startMage->currentStage;
-        if        (stage == 1  && learnedFountain())                  setStage(this_, 10);  // [1] learn fountain
+        if      (stage == 1  && learnedFountain())                setStage(this_, 10);  // [1] learn fountain
         else if (stage == 10 && qMisc("Potions Mixed") > 29)      setStage(this_, 20);  // [2] potions x30
-        else if (stage == 20 && hasMagicAdeptPerk())              setStage(this_, 30);    // [3] adept
-        else if (stage == 30 && qMisc("Spells Learned") > 29)      setStage(this_, 40);    // [4] spells x30
-        else if (stage == 40 && qst::DLC2TT2->currentStage >400)  setStage(this_, 50);    // [5] neloth - kill ildari
-        else if (stage == 50 && staffsFound() > 3)                  setStage(this_, 60);    // [6] staffs x4
-        else if (stage == 60 && solsteimMasksFound() > 2)          setStage(this_, 70);  // [7] solsteim masks
-        else if (stage == 70 && qst::MG08->currentStage > 50)      setStage(this_, 80);  // [8] arch-mage
-        else if (stage == 80 && ritualQuests() > 4)                  setStage(this_, 90);  // [9] ritual quest x5
+        else if (stage == 20 && hasMagicAdeptPerk())              setStage(this_, 30);  // [3] adept
+        else if (stage == 30 && qMisc("Spells Learned") > 29)     setStage(this_, 40);  // [4] spells x30
+        else if (stage == 40 && qst::DLC2TT2->currentStage >400)  setStage(this_, 50);  // [5] neloth - kill ildari
+        else if (stage == 50 && staffsFound() > 3)                setStage(this_, 60);  // [6] staffs x4
+        else if (stage == 60 && solsteimMasksFound() > 2)         setStage(this_, 70);  // [7] solsteim masks
+        else if (stage == 70 && qst::MG08->currentStage > 50)     setStage(this_, 80);  // [8] arch-mage
+        else if (stage == 80 && ritualQuests() > 4)               setStage(this_, 90);  // [9] ritual quest x5
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startCult->currentStage > 0)        //  [CULTIST]
     {
         auto this_ = qst::startCult;
         auto stage = qst::startCult->currentStage;
-        if        (stage == 1  && player->HasPerk(qst::daedraToken))setStage(this_, 10);  // [1] daedra bless
-      //else if (stage == 10 && heart_scroll_papyrus)              setStage(this_, 20);  // [2] heart scroll
-        else if (stage == 20 && qMisc("People Killed") > 29)      setStage(this_, 30);    // [3] humanoid x30
-        else if (stage == 30 && qst::currGoalVal->value > 14)      setStage(this_, 40);    // [4] cultist  x15
-        else if (stage == 40 && chosenDaedra_fullPerks_n_quest()) setStage(this_, 50);    // [5] chosen daedra full
-        else if (stage == 50 && blackBooksDone() > 2)              setStage(this_, 60);    // [6] black books x3
+        if      (stage == 1  && player->HasPerk(qst::daedraToken))   setStage(this_, 10);  // [1] daedra bless
+      //else if (stage == 10 && heart_scroll_papyrus)                setStage(this_, 20);  // [2] heart scroll
+        else if (stage == 20 && qMisc("People Killed") > 29)         setStage(this_, 30);  // [3] humanoid x30
+        else if (stage == 30 && qst::currGoalVal->value > 14)        setStage(this_, 40);  // [4] cultist  x15
+        else if (stage == 40 && chosenDaedra_fullPerks_n_quest())    setStage(this_, 50);  // [5] chosen daedra full
+        else if (stage == 50 && blackBooksDone() > 2)                setStage(this_, 60);  // [6] black books x3
         else if (stage == 60 && daedra_guards_killed() > 2)          setStage(this_, 70);  // [7] daedra guards x3
-        else if (stage == 70 && daedra_artifacts_have() > 14)      setStage(this_, 80);  // [8] daedra artifact x15
+        else if (stage == 70 && daedra_artifacts_have() > 14)        setStage(this_, 80);  // [8] daedra artifact x15
         else if (stage == 80 && haveMiraakSephirothMasks())          setStage(this_, 90);  // [9] miraak & seph masks
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
@@ -634,15 +778,15 @@ namespace qst
     {
         auto this_ = qst::startNecr;
         auto stage = qst::startNecr->currentStage;
-      //if        (stage == 1  && body_parts_papyrus)                setStage(this_, 10);  // [1] body parts
-      //if        (stage == 10 && ritual_scroll_papyrus)            setStage(this_, 20);  // [2] scroll
-        if        (stage == 20 && qMisc("Souls Trapped") > 19)    setStage(this_, 30);  // [3] souls x20
-        else if (stage == 30 && qMisc("People Killed") > 79)    setStage(this_, 40);  // [4] humanoid x80
+      //if      (stage == 1  && body_parts_papyrus)              setStage(this_, 10);  // [1] body parts
+      //if      (stage == 10 && ritual_scroll_papyrus)           setStage(this_, 20);  // [2] scroll
+        if      (stage == 20 && qMisc("Souls Trapped") > 19)     setStage(this_, 30);  // [3] souls x20
+        else if (stage == 30 && qMisc("People Killed") > 79)     setStage(this_, 40);  // [4] humanoid x80
         else if (stage == 40 && vampire_dust_have() > 19)        setStage(this_, 50);  // [5] vampire dust x20
         else if (stage == 50 && qst::currGoalVal->value > 14)    setStage(this_, 60);  // [6] necromants x15
-        else if (stage == 60 && conjRitualQuestDone())            setStage(this_, 70);  // [7] ritual quest conj
-        else if (stage == 70 && equippedConjurPhylactery())        setStage(this_, 80);  // [8] conj phylactery
-        else if (stage == 80 && arch_lich_killed() > 2)            setStage(this_, 90);  // [9] arch liches x3
+        else if (stage == 60 && conjRitualQuestDone())           setStage(this_, 70);  // [7] ritual quest conj
+        else if (stage == 70 && equippedConjurPhylactery())      setStage(this_, 80);  // [8] conj phylactery
+        else if (stage == 80 && arch_lich_killed() > 2)          setStage(this_, 90);  // [9] arch liches x3
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startSnowElf->currentStage > 0)        //  [SNOW ELF]

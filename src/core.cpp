@@ -31,7 +31,7 @@ static std::vector <float> keyCodes;
 
 namespace my {        //   namespace with static variables used only in this file, so no need for their extra declarations
 
-    void initObjects()
+    void initGameData()
     {
         LOG("called initObjects()");
         handler = RE::TESDataHandler::GetSingleton();
@@ -39,6 +39,7 @@ namespace my {        //   namespace with static variables used only in this fil
         fill_data();
         fill_translation();
         qst::initQuestVars();
+        gameplay::initGameplayData();
         LOG("finished initObjects()");
     }
 }
@@ -47,12 +48,14 @@ namespace my {        //   namespace with static variables used only in this fil
 
 float               mys::reserved_MP;        
 float               mys::time_delta;
+float               mys::micro_timer;
 float               mys::ms_compensator;
 float               mys::eq_weight;
 float               mys::dodge_timer;
 uint16_t            mys::vamp_C_state;
 uint16_t            mys::nb_hold_state;
 uint16_t            mys::xdescr_state;
+uint16_t            mys::bossUpdMeter;
 bool                mys::xdescr_on;
 bool                mys::hasHeavyArmor;
 bool                mys::attackKeyHolding;
@@ -85,7 +88,9 @@ void mys::init_globs()
     xdescr_state = 0;
     vamp_C_state = 0;
     nb_hold_state = 0;
+    bossUpdMeter = 0;
     time_delta = 0.0166f;            // initial value of delta, later it will recount for fps
+    micro_timer = 1.f;
 
     SKSE::log::info("mys::init_globs() finished");
 }
@@ -262,7 +267,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up)
                   u_cast_on_self(my::adrenaline_tap, player);
                   RE::DebugNotification(my::adrenaline_text.c_str());
               }
-              if (hold_time > 2.2f)  //  hold
+              if (hold_time > 1.8f)  //  hold
               {
                   u_cast_on_self(my::adrenaline_hold, player);
                   RE::DebugNotification(my::adrenalineMax_text.c_str());
@@ -340,15 +345,12 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up)
     }
     if (keyCode == keyCodes.at(9))  // race
     {
-        if (is_up && player->HasSpell(my::redguardFF)) {
-              u_cast_on_self(my::redguardFF, player);
-        }
-        else if (is_up && player->HasSpell(my::argonianFF)) {
-              u_cast_on_self(my::argonianFF, player);
-        }
-        else if (is_up && player->HasSpell(my::khajeetFF)) {
-              u_cast_on_self(my::khajeetFF, player);
-        }
+		if (!player->HasMagicEffect(my::race_ab_kd))
+		{
+            if (is_up && player->HasSpell(my::redguardFF))      u_cast_on_self(my::redguardFF, player); 
+			else if (is_up && player->HasSpell(my::argonianFF)) u_cast_on_self(my::argonianFF, player); 
+			else if (is_up && player->HasSpell(my::khajeetFF))  u_cast_on_self(my::khajeetFF,  player);
+		}
     }
     if (keyCode == 87)   //  F11
     {
@@ -372,9 +374,13 @@ void apply_levelUp_bonuses()
     float baseMP = mys::player->GetBaseActorValue(RE::ActorValue::kMagicka);
 
     if (baseHP > 250) baseHP = 250;
-    if (baseST > 250) baseST = 250;
     if (baseMP > 250) baseMP = 250;
-
+    if (baseST > 250) {
+        if (mys::player->HasSpell(my::doomSteed)) {
+            if (baseST > 300) baseST = 300;
+        }
+		else baseST = 250;
+    }
     // HP
     auto hp_bonuses = my::lvlup_hp_bonuses->effects;
     if (baseHP > 109)
@@ -444,6 +450,7 @@ void apply_levelUp_bonuses()
 
 void sf_dispel_all()
 {
+        LOG("called sf_dispel_all()");
         my::glob_destr_1->value = 0;
         my::glob_destr_2->value = 0;
         my::glob_destr_3->value = 0;
@@ -477,7 +484,7 @@ void sf_manaReserve_buff_cast(uint16_t buff_index)
 
         if (currMana < 100) return;
 
-        if        (buff_index == 1 && baseMana < 170)  return;        // speed
+        if      (buff_index == 1 && baseMana < 170)  return;        // speed
         else if (buff_index == 2 && baseMana < 180)  return;        // penetr
         else if (buff_index == 3 && baseMana < 170)  return;        // armor
         else if (buff_index == 4 && baseMana < 180)  return;        // reflect
@@ -486,7 +493,7 @@ void sf_manaReserve_buff_cast(uint16_t buff_index)
         
         RE::SpellItem* buff = nullptr;
 
-        if (buff_index == 1)        buff = my::sf_speed_const;            
+        if      (buff_index == 1)   buff = my::sf_speed_const;            
         else if (buff_index == 2)   buff = my::sf_penet_const;
         else if (buff_index == 3)   buff = my::sf_armor_const;
         else if (buff_index == 4)   buff = my::sf_rflct_const;
@@ -518,12 +525,6 @@ void my::sf_handle_reserved_MP()
         if (mys::player->HasSpell(sf_rflct_const))   mys::reserved_MP += 70.0;
         if (mys::player->HasSpell(sf_absrb_const))   mys::reserved_MP += 70.0;
         if (mys::player->HasSpell(sf_stamina_const)) mys::reserved_MP += 40.0;
-
-        if (!new_hooks_installed && mys::reserved_MP > 0)   // on game load will check active manareserve buffs on player, and apply new hooks if need
-        {
-            install_new_hooks();
-            new_hooks_installed = true;
-        }
 
         float maxMana = u_get_actor_value_max(mys::player, RE::ActorValue::kMagicka);
         float currMana = mys::player->GetActorValue(RE::ActorValue::kMagicka);
@@ -674,13 +675,13 @@ float reflectedArrow_dmg(float dealt_dmg)
         float arrowRes = mys::player->GetActorValue(RE::ActorValue::kSpeechcraftSkillAdvance);
         LOG("dealt_dmg_param - {}, weapDmg - {}, powerMod - {}, penetr - {}, armorFactorMult - {}", dealt_dmg, weapDmg, avPowerMod, penetr, armorFactorMult);
 
-        LOG("finished reflectedArrow_dmg()");
+        //LOG("finished reflectedArrow_dmg()");
 
-        return ((dealt_dmg + weapDmg*1.5f) * (1 + avPowerMod / 100)) * armorFactorMult * (1 - arrowRes/200);
+        return ((dealt_dmg + weapDmg*1.6f) * (1 + avPowerMod / 100)) * armorFactorMult * (1 - arrowRes/200);
 }
 
 
-float manaShield (RE::Actor* target, float& damage, RE::TESDataHandler* handler, bool sf)
+float manaShield (RE::Actor* target, float damage, RE::TESDataHandler* handler, bool sf)
 {
         LOG("called manaShield()");
 
@@ -744,7 +745,7 @@ float convert_physDmg_toFrost (RE::Actor* target, RE::HitData* hit_data, float p
 }
 
 
-inline void sword_injure (RE::Actor* agressor, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
+void sword_injure (RE::Actor* agressor, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
 {
     LOG("called sword_injure()");
 
@@ -770,6 +771,68 @@ inline void sword_injure (RE::Actor* agressor, RE::Actor* target, RE::HitData *h
     }
 }
 
+
+void handle_stagger (RE::Actor* target, RE::TESObjectWEAP* weap, bool pwatk)
+{
+    RE::SpellItem* staggerSpell = nullptr;
+    int random = rand() % 10;
+    if (weap->GetWeaponType() < RE::WEAPON_TYPE(5))  // 1H
+    {
+       if (pwatk) {
+            staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x2E9A1D, "Requiem.esp");    // stagger power 1H
+            random += 2;
+       }
+    }
+    else   //  2H
+    {
+       if (pwatk) {
+            staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x2E9A1D, "Requiem.esp");    // stagger power 2H
+            random += 3;
+       }
+       else {
+            staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x32C8B1, "Requiem.esp");     // stagger light 2H
+       }
+    }
+
+    if (staggerSpell && random > 5) {
+         u_cast_on_self(staggerSpell, target);
+    }
+}
+
+
+ std::string trimmed_str (float val)
+ {
+    std::string s = std::to_string(val);
+    while (s.length() > 4) s.pop_back();
+    return s;
+ }
+
+void print_dmg_to_console (RE::Actor* agr, RE::Actor* target, RE::TESObjectWEAP* weap, float damage) 
+{
+    std::string s = "hit - " + std::string(agr->GetName()) + ", ";
+    if (weap->GetWeaponType() < RE::WEAPON_TYPE(5))   // 1H
+    {
+         s += "1h_powerMod - " + std::to_string(int(agr->GetActorValue(RE::ActorValue::kOneHandedPowerModifier))) + ", ";
+         s += "1h_penetr - " + std::to_string(int(agr->GetActorValue(RE::ActorValue::kOneHandedModifier))) + ", ";
+    }
+    else  // 2H
+    {
+         s += "2h_powerMod - " + std::to_string(int(agr->GetActorValue(RE::ActorValue::kTwoHandedPowerModifier))) + ", ";
+         s += "2h_penetr - " + std::to_string(int(agr->GetActorValue(RE::ActorValue::kTwoHandedModifier))) + ", ";
+    }
+   
+	float total_atkDmgMult = 1.f, total_pwAtkDmgMult = 1.f;      
+	// прогоняем 1.f через ентри перков агрессора, что-бы узнать суммарные мульты. При этом проверяются кондишены, и мы получаем реальный мульт, там где кондишены не прошли игнорируется.
+	RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, weap, target, std::addressof(total_atkDmgMult));
+    RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, weap, target, std::addressof(total_pwAtkDmgMult));
+
+    s += "perks_dmgMult - " + trimmed_str(total_atkDmgMult) + ", ";
+    s += "pwAtkDmgMult - " + trimmed_str(total_pwAtkDmgMult) + ",  ";
+    s += "HP was - " + std::to_string(int(target->GetActorValue(RE::ActorValue::kHealth))) + ",  ";
+    s += "damage - " + std::to_string(int(damage));
+
+    RE::ConsoleLog::GetSingleton()->Print(s.c_str());  // print to console
+}
 
 float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at the beginning of attack process, but cannot interrupt attack]
 {
@@ -807,7 +870,7 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
         if (isBash) {                                                                                                
              u_cast(my::bash_kd_self, agressor, agressor);
              if (agressor->IsPlayerRef()) {
-                 float stCost = 0.12f * u_get_actor_value_max(agressor, RE::ActorValue::kStamina);
+                 float stCost = 0.1f * u_get_actor_value_max(agressor, RE::ActorValue::kStamina);
                  agressor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -stCost);
              }
              return damage;
@@ -815,6 +878,10 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
         return damage;
     }
 
+	if (!my::mercenaryQst->IsCompleted()) {
+        target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -damage * 0.4f);
+    }
+	
     if (weap->HasKeyword(my::sword_1h)  &&  agressor->HasPerk(my::swordFocus1) && !isBlocked && !target->HasMagicEffect(my::injureEff) && !target->HasKeyword(my::actorDwarven)) {
         sword_injure(agressor, target, &hit_data, isPowerAtk);
     }
@@ -822,28 +889,8 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
     if (target->IsPlayerRef())
     {
           LOG("allOnHitEffects___target_was_player");
-          RE::SpellItem* staggerSpell = nullptr;
-          int random = rand() % 10;
-          if (weap->GetWeaponType() < RE::WEAPON_TYPE(5))  // 1H
-          {
-              if (isPowerAtk) {
-                  staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x2E9A1D, "Requiem.esp");    // stagger power 1H
-                  random += 2;
-              }
-          }
-          else
-          {
-              if (isPowerAtk) {
-                  staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x2E9A1D, "Requiem.esp");    // stagger power 2H
-                  random += 3;
-              }
-                else {
-                 staggerSpell = my::handler->LookupForm<RE::SpellItem>(0x32C8B1, "Requiem.esp");     // stagger light 2H
-              }
-          }
-          if (staggerSpell && random > 5) {
-              u_cast_on_self(staggerSpell, target);
-          }
+
+          handle_stagger (target, weap, isPowerAtk);
 
           if (target->HasMagicEffect(my::nb_hold_slowTime)) {    // nb slowtime and invert damage to heal
                  target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, damage);
@@ -871,6 +918,8 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   //  [fires at 
           if (target->HasPerk(my::snowElf_anabioz)) {
               convert_dmg_delta = convert_physDmg_toFrost(target, &hit_data, 0.3f);
           }
+
+		  print_dmg_to_console(agressor, target, weap, damage-manaShield_dmg_delta-convert_dmg_delta);
 
     }// end targer->player only
     else if (agressor->IsPlayerRef())
@@ -1085,28 +1134,22 @@ bool on_drink_potion (RE::Actor* actor, RE::AlchemyItem* potion, RE::ExtraDataLi
     return true;                // just apply potion.  return false - decline applying
 }
 
+
 void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int count) 
 {
+    LOG ("called on_apply_poison()");
 	if (poison->HasKeyword(my::oil_keyword))
 	{
-        if (const auto queue = RE::UIMessageQueue::GetSingleton())
-		{
-            queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);  // close inventory
-            queue->AddMessage(RE::TweenMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);      // close tween menu (necessary)
-            auto camera = RE::PlayerCamera::GetSingleton();
-            if (camera->IsInFirstPerson()) camera->ForceThirdPerson();  // force camera to 3rd person for oil anim
-        }
-        
-		if (!u_get_pc_poison())
-		{
-            auto weap = u_get_weapon(mys::player, false);  // temp concat name weap (+ oil)
-            if (weap && !weap->fullName.contains("+")) {
-                  std::string weapName(weap->fullName.c_str());
-                  std::string oilName(poison->fullName.c_str());
-                  weap->fullName = weapName + " (+" + oilName + ")";
-            }
-		}
-        mys::player->NotifyAnimationGraph("IdleCombatStretchingStart");  // play anim event
+        u_cast_on_self (my::oil_after_use, mys::player);   // papyrus does all logic 
+
+        //if (const auto queue = RE::UIMessageQueue::GetSingleton())
+		//{
+        //  queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);  // close inventory
+        //  queue->AddMessage(RE::TweenMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);      // close tween menu (necessary)
+        //  auto camera = RE::PlayerCamera::GetSingleton();
+        //  if (camera->IsInFirstPerson()) camera->ForceThirdPerson();  // force camera to 3rd person for oil anim
+        //}
+        //mys::player->NotifyAnimationGraph("IdleCombatStretchingStart");  // play anim event
 	}
 }
 
@@ -1132,10 +1175,10 @@ void snowElf_applyChant ()
 }
 
 
-void on_adjust_active_effect(RE::ActiveEffect *eff, float power, bool &unk)
+void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
 {
        if (!eff || !eff->effect || !eff->effect->baseEffect) return;
-      //LOG("called on_adjust_active_effect(), eff name - {}", eff->GetBaseObject()->fullName);
+       //LOG("called on_adjust_active_effect(), eff name - {}", eff->GetBaseObject()->fullName);
 
         auto baseEff = eff->GetBaseObject();
 
@@ -1175,13 +1218,9 @@ void on_adjust_active_effect(RE::ActiveEffect *eff, float power, bool &unk)
               }
         }
 
-        if (baseEff->HasKeyword(my::magicSlow_KW)) {
-              if (target->IsPlayerRef() && target->HasSpell(my::doomSteed)) eff->magnitude *= 0.5f;
-        }
-
         if (baseEff->GetArchetype() == RE::EffectSetting::Archetype::kSlowTime)    {
-              if (target->IsPlayerRef() && target->HasPerk(my::bossFightDebuff)) {
-                 eff->magnitude *= 0.5f;
+              if (target->HasPerk(my::bossFightDebuff) && !baseEff->HasKeyword(my::slowTimeExclude)) {
+                 eff->magnitude  = 0.82f;
                  eff->duration  *= 0.5f;
               }
         }
@@ -1197,11 +1236,10 @@ void on_adjust_active_effect(RE::ActiveEffect *eff, float power, bool &unk)
                  else {
                      u_MessageBox::MyMessageBox::Show(my::msgBoxAbils, &msgBoxChoiceCallback);  //   show MessageBox to choose Ability key
                  }
-                   
               }
-              if (baseEff->HasKeyword(my::snowElfEnchKW)) snowElf_applyChant();                 // snowElf chant        
+              if (baseEff->HasKeyword(my::snowElfEnchKW)) snowElf_applyChant();                // snowElf chant        
               if (baseEff->HasKeyword(my::sf_effect_KW))  my::sf_handle(eff, baseEff);         // sf    
-              //if (baseEff->HasKeyword(my::oil_keyword)) handle_oil(target, baseEff, true); // oil 
+              //if (baseEff->HasKeyword(my::oil_keyword)) handle_oil(target, baseEff, true);   // oil 
 
         }// dll check effects
 
@@ -1346,7 +1384,8 @@ void update_mass_effects (RE::Actor* actor, float total_eq_weight = 0, bool abou
 
     if (mys::hasHeavyArmor || aboutToEquipHeavyArmor)  // heavy armor 
     {
-        if (actor->HasPerk(my::heavy_1_perk))  {perks_speedFactor -= 0.6f;  perks_InfamyFactor *= 0.95f;}            
+        if (actor->HasPerk(my::heavy_1_perk))  {perks_speedFactor -= 0.4f;  perks_InfamyFactor *= 0.95f;}
+		if (actor->HasPerk(my::heavy_1_perk2)) {perks_speedFactor -= 0.2f; }
         if (actor->HasPerk(my::heavy_25_perk)) {perks_speedFactor -= 0.09f; perks_InfamyFactor *= 0.85f;}
         if (actor->HasPerk(my::heavy_sprint_perk)) {perks_speedFactor -= 0.06f; perks_InfamyFactor *= 0.8f;}
         if (actor->HasPerk(my::heavy_50_perk)) {perks_speedFactor -= 0.05f; perks_InfamyFactor *= 0.7f;}
@@ -1381,10 +1420,20 @@ inline void update_perkArmorBuffs (RE::Actor* actor)  //  to apply perk % armor 
     actor->ModActorValue(RE::ActorValue::kDamageResist, 1.0f);
 }
 
+void handle_bossAppearance(RE::Actor *boss)
+{
+    my::currentBoss = boss;
+    if      (boss->HasSpell(my::olve_training))  my::bossFightID->value = 1;
+	else if (boss->HasSpell(my::seph_training))  my::bossFightID->value = 2;
+	else if (boss->HasSpell(my::seph_training2)) my::bossFightID->value = 2;
+
+}
+
 void on_equip (RE::Actor* actor, RE::TESBoundObject* object) 
 {
     if (!actor || !object) return;
     LOG("called on_equip() for - {}", object->GetName());
+    if (actor->HasMagicEffect(my::bossFightStarter)) handle_bossAppearance(actor);
     if (!actor->IsPlayerRef()) { update_perkArmorBuffs(actor); return; }  
     if (!object->IsWeapon() && !object->IsArmor()) return;
     float worn_weight = u_get_worn_equip_weight(mys::player);                //  at this momemt this item is not equipped yet, and its weight won't be taken into account
@@ -1455,6 +1504,11 @@ void log_game_info (RE::Actor* pl, bool death = false, RE::Actor* killer = nullp
 
     if (!death) // info
     {
+        string baseMP = std::to_string(mys::player->GetBaseActorValue(RE::ActorValue::kMagicka));
+        string baseHP = std::to_string(mys::player->GetBaseActorValue(RE::ActorValue::kHealth));
+        string baseST = std::to_string(mys::player->GetBaseActorValue(RE::ActorValue::kStamina));
+        info += string("Base MP/HP/ST - ") + baseMP + "/" + baseHP + "/" + baseST + "; ";
+        info += string("MaxHP - ") + std::to_string(u_get_actor_value_max(pl, RE::ActorValue::kHealth)) + "; ";
         info += string("CarryWeight - ") + std::to_string(pl->GetActorValue(RE::ActorValue::kCarryWeight)) + "; ";
         info += string("Gold - ") + std::to_string(u_get_item_count(pl, 0xf)) + "; ";
         info += u_get_entered_console_commands();
@@ -1485,26 +1539,17 @@ void log_player_death (RE::Actor* pl, RE::Actor* killer)
 }
 
 
-void on_death(RE::Actor* victim, RE::Actor* killer)  // event onDeath, called after death
+void on_death (RE::Actor* victim, RE::Actor* killer)  // event onDeath, called after death
 {
     if (!victim) return;
     qst::check_onDeath_questGoals(victim);
     if (victim->IsPlayerRef()) {
         log_player_death(victim, killer);
     }
-} 
-
-
-inline void reset_weap_name()
-{
-    auto weap = u_get_weapon(mys::player, false);  // return default name
-    if (weap && weap->fullName.contains("+")) {
-        std::string weapName(weap->fullName.c_str());
-        while (weapName.back() != '(') weapName.pop_back();
-        weapName.pop_back();
-        weap->fullName = weapName;
+    if (victim->HasMagicEffect(my::bossFightStarter)) {
+        my::bossFightID->value = 0;
     }
-}
+} 
 
 void my::on_wait()
 {
@@ -1513,7 +1558,6 @@ void my::on_wait()
     if (poisonData && poisonData->count > 1) {
         poisonData->count = 0;
         u_remove_pc_poison();
-        reset_weap_name();
     }
 }
 
@@ -1538,32 +1582,26 @@ void on_inventory_open()   // event
 
 void on_inventory_close()  // event
 {
-    auto pois_data = u_get_pc_poison();
-    if (pois_data && pois_data->poison->HasKeyword(my::oil_keyword)) {
-        if (pois_data->count > 118) {                                                  // later change to max_charges var, which comes from oil applying
-            mys::player->NotifyAnimationGraph("IdleCombatStretchingStart");
-        }
-    }
+	//...
 }
 
-inline void update_oil ()
+inline void update_oil (RE::Actor *pl)
 {
     auto poisonData = u_get_pc_poison();
     if (poisonData) {
          if (poisonData->count > 0) {
-               poisonData->count -= 1;
-               RE::DebugNotification(std::to_string(poisonData->count).c_str());  // DEBUG charges
+            if (pl->IsWeaponDrawn())
+               poisonData->count -= 1;          // decrement oil every update 
          } 
-	     else u_remove_pc_poison();
+	     else u_remove_pc_poison();  // oil ends
     }
-	else reset_weap_name();
 }
 
 inline void update_gamelog ()
 {
 	if (mys::gameProcessed->value > 0) {
           my::log_counter++;
-          if (my::log_counter > 250) {    // +- 12min
+          if (my::log_counter > 250) {    // +- 15min
                  my::log_counter = 0;
                  log_game_info(mys::player);
           }
@@ -1578,6 +1616,8 @@ inline void update_keycodes ()
     my::rightHandKeyCode = RE::ControlMap::GetSingleton()->GetMappedKey("Right Attack/Block"sv, RE::INPUT_DEVICE::kMouse) + Utils::kMacro_NumKeyboardKeys;
     // if device = mouse it returns keyMask (as in InputWatcher), i have to add 256 (NumKeyboardKeys) to it, but still can bind RHand on keyBoard, so how to get device? (todo)
 }
+
+
 
 void on_my_update()
 {
@@ -1598,13 +1638,16 @@ void on_my_update()
     if (mys::gameProcessed->value > 0)  // after player selected start
     {
         qst::check_class_achievements(mys::player);
+        if (my::bossFightID->value > 0) {
+             gameplay::bossFightHandle(my::currentBoss, my::bossFightID->value, mys::bossUpdMeter);
+        }
     }
 
     if (my::twicedUpdate)  // every 2nd update
     {
         update_gamelog();
         update_keycodes();
-        update_oil();
+        update_oil (mys::player);
         my::vamp_state_glob->value = 0;
     }
     my::twicedUpdate = !my::twicedUpdate;
@@ -1624,6 +1667,12 @@ void on_my_update()
 }
 
 
+//void on_micro_update()   // every 1 sec
+//{ 
+//	 gameplay::gmpl_on_micro_update(); 
+//}
+
+
 //--------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------ fill most data on game loads (mainMenu) ---------------------------------------------
 //--------------------------------------------------------------------------------------------------------------------------------
@@ -1639,6 +1688,7 @@ namespace my
         nb_1_atkChoice = handler->LookupForm<RE::TESGlobal>(0xCDF64F, "RfaD SSE - Awaken.esp");
         nb_magicBlade = handler->LookupForm<RE::TESGlobal>(0xDF100A, "RfaD SSE - Awaken.esp");
         atronachAbsorbChanceGlob = handler->LookupForm<RE::TESGlobal>(0x87A67A, "RfaD SSE - Awaken.esp");
+        bossFightID = handler->LookupForm<RE::TESGlobal>(0x1C7FFB, "RfaD SSE - Awaken.esp");
         redguardFF = handler->LookupForm<RE::SpellItem>(0x284194, "RfaD SSE - Awaken.esp");
         argonianFF = handler->LookupForm<RE::SpellItem>(0x3A04AC, "RfaD SSE - Awaken.esp");
         khajeetFF  = handler->LookupForm<RE::SpellItem>(0xEB1866, "RfaD SSE - Awaken.esp");
@@ -1666,6 +1716,7 @@ namespace my
         bindsInfo_eff = handler->LookupForm<RE::EffectSetting>(0xE5143A, "RfaD SSE - Awaken.esp");
         snowElfEnch = handler->LookupForm<RE::EnchantmentItem>(0x7FBAE8, "RfaD SSE - Awaken.esp");
     
+	    actorBoss      = handler->LookupForm<RE::BGSKeyword>(0x1C7FF6, "RfaD SSE - Awaken.esp");
         dodgeEffectKW  = handler->LookupForm<RE::BGSKeyword>(0x7B4A92, "RfaD SSE - Awaken.esp");
         arrowReflectKW = handler->LookupForm<RE::BGSKeyword>(0xECADB8, "RfaD SSE - Awaken.esp");
         bindKeyKw = handler->LookupForm<RE::BGSKeyword>(0xE2DCC6, "RfaD SSE - Awaken.esp");
@@ -1685,6 +1736,7 @@ namespace my
         bloodRivers_allow = handler->LookupForm<RE::EffectSetting>(0xA242D5, "RfaD SSE - Awaken.esp");
         injureSpell  = handler->LookupForm<RE::SpellItem>(0x3C3C2C, "RfaD SSE - Awaken.esp");            // injure_dmg_spell
         breakableBowKW = handler->LookupForm<RE::BGSKeyword>(0x2E232E, "Requiem.esp");
+        slowTimeExclude = handler->LookupForm<RE::BGSKeyword>(0x250D70, "RfaD SSE - Awaken.esp");
         lvlup_bonuses_KW = handler->LookupForm<RE::BGSKeyword>(0x3833C5, "devFixes.esp");
         breakBowSpl = handler->LookupForm<RE::SpellItem>(0x7637F8, "RfaD SSE - Awaken.esp");
         stressSpell = handler->LookupForm<RE::SpellItem>(0xA5E9F, "devFixes.esp");      // attack stress FF
@@ -1700,8 +1752,15 @@ namespace my
         block_anim_blocker = handler->LookupForm<RE::SpellItem>(0x3E3FDA, "devFixes.esp");
         become_bats = handler->LookupForm<RE::SpellItem>(0x19FD4, "Requiem for a Dream - Kelpie.esp");
         batForm_eff = handler->LookupForm<RE::EffectSetting>(0x5949, "Requiem for a Dream - Kelpie.esp");
+
+		olve_training  = handler->LookupForm<RE::SpellItem>(0x3E17F4,"RfaD SSE - Awaken.esp");
+        seph_training  = handler->LookupForm<RE::SpellItem>(0x98877, "RfaD SSE - Awaken.esp");
+        seph_training2 = handler->LookupForm<RE::SpellItem>(0x4CECF, "refrain_DeadLands.esp");
+
+		oil_after_use = handler->LookupForm<RE::SpellItem>(0x23C924, "RfaD SSE - Awaken.esp");
        
-        bats_kd = handler->LookupForm<RE::EffectSetting>(0x7DBDF8, "RfaD SSE - Awaken.esp");
+		race_ab_kd = handler->LookupForm<RE::EffectSetting>(0x284198, "RfaD SSE - Awaken.esp");
+        bats_kd    = handler->LookupForm<RE::EffectSetting>(0x7DBDF8, "RfaD SSE - Awaken.esp");
         msgBoxDodge = handler->LookupForm<RE::BGSMessage>(0xB542F4, "RfaD SSE - Awaken.esp");
         msgBoxAbils = handler->LookupForm<RE::BGSMessage>(0xE83EDB, "RfaD SSE - Awaken.esp");
         vampirism     = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);   //
@@ -1722,8 +1781,9 @@ namespace my
         heavy_75_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x107832);   //
         heavy_100_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F33);   //
         heavy_sprint_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x7935E); //
-        nb_perk_1 = RE::TESForm::LookupByID<RE::BGSPerk>(0x153D0);           //
+        nb_perk_1 = RE::TESForm::LookupByID<RE::BGSPerk>(0x153D0);         //
         nb_perk_2 = RE::TESForm::LookupByID<RE::BGSPerk>(0x59B78);         //
+        heavy_1_perk2 = handler->LookupForm<RE::BGSPerk>(0x9A8D38, "devFixes.esp");
         
         slashSound   = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(0xDAB81);      //
         vampireHeartBeat = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(0xFF9E8);  //
@@ -1756,7 +1816,9 @@ namespace my
         meridiaFF = handler->LookupForm<RE::SpellItem>(0x54EB8,  "ChihSkillTree.esp");
         meridia_kd = handler->LookupForm<RE::EffectSetting>(0x14ED3, "ChihSkillTree.esp");
 
+		mercenaryQst = handler->LookupForm<RE::TESQuest>(0xF1CF, "RfaD SSE - Awaken.esp");
 
+		bossFightStarter = handler->LookupForm<RE::EffectSetting>(0x1C7FF9, "RfaD SSE - Awaken.esp");
         oil_keyword = handler->LookupForm<RE::BGSKeyword>(0xCFAED,  "RfaD SSE - Awaken.esp");
         snowElfEnchKW = handler->LookupForm<RE::BGSKeyword>(0x99B51C, "RfaD SSE - Awaken.esp");
         allow_fx_kw = handler->LookupForm<RE::BGSKeyword>(0x664F36, "RfaD SSE - Awaken.esp");
@@ -1792,7 +1854,7 @@ namespace my
 
     void fill_data()
     {
-        bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BA4, "RfaD SSE - Awaken.esp"));    // [0] - 56 - "Dodge"        // lAlt
+        bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BA4, "RfaD SSE - Awaken.esp"));  // [0] - 56 - "Dodge"       // lAlt
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BA5, "RfaD SSE - Awaken.esp"));  // [1] - 47 - "Bats"        // V
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BA6, "RfaD SSE - Awaken.esp"));  // [2] - 46 - "Boil"        // C
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BA7, "RfaD SSE - Awaken.esp"));  // [3] - 45 - "Adrenaline"  // X
@@ -1801,7 +1863,7 @@ namespace my
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BAA, "RfaD SSE - Awaken.esp"));  // [6] - 21 - "Mirror"      // Y
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BAB, "RfaD SSE - Awaken.esp"));  // [7] - 22 - "Twin"        // U
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BAC, "RfaD SSE - Awaken.esp"));  // [8] - 47 - "Cultist"     // V
-        bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BAD, "RfaD SSE - Awaken.esp"));    // [9] - 20 - "Race"        // T
+        bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0xE74BAD, "RfaD SSE - Awaken.esp"));  // [9] - 20 - "Race"        // T
         
         keyCodes = { 56, 47, 46, 45, 45, 20, 21, 22, 47, 20 };   // default binds of instant abilities
 
@@ -1829,9 +1891,10 @@ namespace my
         sf_map.emplace(1375701, 5);  // absorb
         sf_map.emplace(2564656, 6);  // stamina
 
-        new_hooks_installed = false;
+		reflectedArrow = nullptr;
+        currentBoss = nullptr;
+        currentBossAutocast = nullptr;
         twicedUpdate = false;
-        reflectedArrow = nullptr;
         instantAbIndex = 0;
         rightHandKeyCode = 256;        // initial value = mouse left
         log_counter = 230;

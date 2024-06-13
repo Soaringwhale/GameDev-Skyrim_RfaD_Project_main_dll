@@ -33,6 +33,7 @@ namespace my
     static RE::TESGlobal* nb_magicBlade;
     static RE::TESGlobal* atronachAbsorbChanceGlob;
     static RE::TESGlobal* snowElf_wears_EnchWeap;
+    static RE::TESGlobal* bossFightID;
       
     static RE::BGSPerk* snowElf_anabioz;
     static RE::BGSPerk* bowSlowTimePerk;
@@ -44,8 +45,11 @@ namespace my
     static RE::SpellItem* argonianFF;
     static RE::SpellItem* khajeetFF;
 
+	static RE::SpellItem* oil_after_use;
+
+	static RE::BGSKeyword* slowTimeExclude;
     static RE::BGSKeyword* arrowReflectKW;
-    static RE::BGSKeyword* oil_keyword;
+    static RE::BGSKeyword *oil_keyword;
     static RE::EffectSetting* bindsInfo_eff;
     static RE::EffectSetting* meridia_kd;
     static RE::TESEffectShader* bloodBubbles_FX;
@@ -54,6 +58,7 @@ namespace my
     static RE::SpellItem* become_bats;
     static RE::SpellItem* nb_main_holdFF;
     static RE::EffectSetting* bats_kd;
+    static RE::EffectSetting* race_ab_kd;
     static RE::EffectSetting* nb_fullReflect;
     static RE::EffectSetting* nb_mainEff;
     static RE::EffectSetting* nb_openMode;
@@ -72,6 +77,9 @@ namespace my
     static RE::SpellItem* snowElf_raceAb;
     static RE::SpellItem* nb_Reflect;
     static RE::SpellItem* nb_mainInvisAb;
+    static RE::SpellItem* olve_training;
+    static RE::SpellItem* seph_training;
+    static RE::SpellItem* seph_training2;
     static RE::SpellItem* adrenaline_hold;
     static RE::SpellItem* bloodBrand;
     static RE::SpellItem* bloodRiversAB;
@@ -92,11 +100,13 @@ namespace my
     static RE::EffectSetting* injureEff;
     static RE::EffectSetting* adrenalineKD;
     static RE::EffectSetting* sf_descr;
+    static RE::EffectSetting* bossFightStarter;
     static RE::SpellItem* injureSpell;
     static RE::BGSKeyword* bindKeyKw;
     static RE::BGSKeyword* breakableBowKW;
     static RE::BGSKeyword* snowElfEnchKW;
     static RE::BGSKeyword* actorDwarven;
+    static RE::BGSKeyword* actorBoss;
     static RE::BGSKeyword* allow_fx_kw;
     static RE::SpellItem* breakBowSpl;
     static RE::SpellItem* stressSpell;
@@ -109,7 +119,7 @@ namespace my
     static RE::SpellItem* lvlup_st_bonuses;
     static RE::SpellItem* lvlup_mp_bonuses;
     static RE::SpellItem* bash_kd_self;
-    static RE::SpellItem* block_anim_blocker;  
+    static RE::SpellItem* block_anim_blocker;
     static RE::BGSKeyword* magicSlow_KW;
     static RE::BGSKeyword* sword_1h;
     static RE::BGSKeyword* alch_heal_KW;
@@ -141,14 +151,10 @@ namespace my
     static RE::BGSKeyword* regulator_eff;
     static RE::BGSMessage* msgBoxDodge;
     static RE::BGSMessage* msgBoxAbils;
+    static RE::TESQuest *mercenaryQst;
 
-    static RE::BGSPerk* evasion_1_perk;
-    static RE::BGSPerk* heavy_1_perk;
-    static RE::BGSPerk* heavy_25_perk;
-    static RE::BGSPerk* heavy_75_perk;
-    static RE::BGSPerk* heavy_50_perk;
-    static RE::BGSPerk* heavy_100_perk;
-    static RE::BGSPerk* heavy_sprint_perk;
+    static RE::BGSPerk *evasion_1_perk;
+    static RE::BGSPerk *heavy_1_perk, *heavy_1_perk2, *heavy_25_perk, *heavy_50_perk, *heavy_75_perk, *heavy_100_perk, *heavy_sprint_perk;
 
     static RE::SpellItem* mass_penalty_speed;
     static RE::SpellItem* mass_penalty_noise;
@@ -163,16 +169,16 @@ namespace my
     static uint32_t  instantAbIndex;
     static uint32_t  rightHandKeyCode;
     static int log_counter;
+    static RE::Actor     *currentBoss;
+    static RE::SpellItem *currentBossAutocast;
     static float waitStartGameHour;
     static std::string  sf_noEffects, sf_rem_current, sf_add_new, sf_removed, sf_all_clear, sf_speed_text,
 					    sf_penetr_text, sf_armor_text, sf_reflect_text, sf_absorb_text, sf_stamina_text,
 						adrenaline_text, adrenalineMax_text, oil_decline_text;
         
-    static bool new_hooks_installed;
     static bool twicedUpdate;
        
-    void initObjects();
-    void install_new_hooks();
+    void initGameData();
     void sf_handle_reserved_MP();
     void sf_handle(RE::ActiveEffect *eff, RE::EffectSetting *baseEff);
     void fill_gamePointers();
@@ -193,6 +199,7 @@ namespace x_desc  // for description module
 struct mys						//  variables that can be used in all project files
 {
     static float time_delta;
+    static float micro_timer;
     static float reserved_MP;
     static float ms_compensator;
     static float eq_weight;
@@ -200,6 +207,7 @@ struct mys						//  variables that can be used in all project files
     static uint16_t vamp_C_state;
     static uint16_t nb_hold_state;
     static uint16_t xdescr_state;
+    static uint16_t bossUpdMeter;
     static bool  xdescr_on;
     static bool  hasHeavyArmor;
     static bool  attackKeyHolding;
@@ -255,3 +263,4 @@ void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int
 //bool on_arrow_collide(RE::Projectile* proj, RE::hkpCollidable* coll); 
 
 void on_my_update();
+//void on_micro_update();
