@@ -16,7 +16,7 @@ namespace gameplay
 
    float get_oil_scale_mult (RE::Actor* pl, RE::AlchemyItem* oil)
    {
-	   float mult = 1.f;
+       float mult = 1.f;
        if (pl->HasPerk(alch_poison_25_perk)) mult *= (1.f + (pl->GetActorValue(RE::ActorValue::kAlchemy) * 0.01f));
        if (pl->HasPerk(alch_100_perk))       mult *= 1.2f;
        if (oil->HasKeyword(oil_improvedKW))  mult *= 1.2f;
@@ -28,11 +28,11 @@ namespace gameplay
    {
       LOG("called oil_proc");
 	  
-	  auto poisonData = u_get_pc_poison();
+      auto poisonData = u_get_pc_poison();
       if (!poisonData) return false;
       auto oil = poisonData->poison;                             // alchItem oil
-	  if (!oil || oil->effects.empty()) return false;
-	  auto oil_id = oil->effects[0]->baseEffect->formID;         // id of effectSetting
+      if (!oil || oil->effects.empty()) return false;
+      auto oil_id = oil->effects[0]->baseEffect->formID;         // id of effectSetting
 	  
       float charges = float(poisonData->count);
       float max_charge = pl->HasPerk(alch_poison_50_perk) ? 180.f : 120.f;      // max charge depends on perk and oil grade
@@ -58,16 +58,16 @@ namespace gameplay
 
       if (oil_id == oil_silver->formID)    // silver oil
       {
-		  if (target->HasKeyword(actorTypeUndead))
-		  {
+          if (target->HasKeyword(actorTypeUndead))
+          {
               float realMagn = 5.1f * get_oil_scale_mult(pl, oil);      // 100 alch + all perks will make ~17
               if (!hit_data->weapon->HasKeyword(weapMaterialSilver))
-			  {
+              {
                   hit_data->totalDamage *= (1.f + realMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
               }
               float dotDmg = realMagn + (hit_data->totalDamage * 0.05f);  // 17 + 5% of dmg
               pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverBurn, false, target, 1.f, false, dotDmg*ef, pl);
-		  }
+          }
       }
       else if (oil_id == oil_disease->formID)   // disease oil
       {
@@ -77,8 +77,8 @@ namespace gameplay
       }
       else if (oil_id == oil_ignite->formID)    // ignite oil
       {   
-		  // decrease fire res
-	      pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0.f, pl);                 
+          // decrease fire res
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0.f, pl);                 
           int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
           if (fireRes < -30) fireRes = -30;
           int random = rand() % (fireRes+50);
@@ -92,7 +92,7 @@ namespace gameplay
           int random = rand() % (frostRes+40);
           if (random < 10 && !target->HasMagicEffect(oil_KWHolder))
               pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_frostOnHit, false, target, ef, false, 0.f, pl);
-		  return true;   // convert dmg to frost in core.cpp
+          return true;   // convert dmg to frost in core.cpp
       }
       else if (oil_id == oil_poison->formID)     // poison oil
       {    
@@ -111,7 +111,7 @@ namespace gameplay
       }
 	  else if (oil_id == oil_corrose->formID)    // corrose oil
       {    
-		  float realMagn = 0.03f * get_oil_scale_mult(pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
+          float realMagn = 0.03f * get_oil_scale_mult(pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
           float armorDmg = target->GetActorValue(RE::ActorValue::kDamageResist) * realMagn;     
           pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_corroseOnHit, false, target, ef, false, armorDmg, pl);
           hit_data->totalDamage *= (1.f - realMagn);  // reduce dmg, for ex *= 0.9
