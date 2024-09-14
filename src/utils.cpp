@@ -196,7 +196,7 @@ RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)
                 const auto xEnchLeft = xList->GetByType<RE::ExtraWornLeft>();
                 const auto xEnchRight = xList->GetByType<RE::ExtraWorn>();
                 if ((xEnchLeft || xEnchRight) && xList->GetByType<RE::ExtraEnchantment>()) {
-                    if (xEnchLeft)       checkleft = true;
+                    if      (xEnchLeft)  checkleft = true;
                     else if (xEnchRight) checkleft = false;
                     if (checkleft == left) return xList->GetByType<RE::ExtraEnchantment>()->enchantment;
                 }
@@ -206,10 +206,23 @@ RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)
     return nullptr;
 }
 
-RE::ExtraPoison* u_get_pc_poison()
+void u_remove_weap_ench (RE::InventoryEntryData* entry)
+{
+    if (entry->extraLists) {
+        for (const auto& xList : *entry->extraLists) {
+            const auto xEnchLeft = xList->GetByType<RE::ExtraWornLeft>();
+            const auto xEnchRight = xList->GetByType<RE::ExtraWorn>();
+            if ((xEnchLeft || xEnchRight) && xList->GetByType<RE::ExtraEnchantment>()) {
+                xList->RemoveByType(RE::ExtraDataType::kEnchantment);
+            }
+        }
+    }
+}
+
+RE::ExtraPoison* u_get_pc_poison (bool is_left_hand)
 {
     LOG("called u_get_pc_poison()");
-    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(false)) {
+    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(is_left_hand)) {
         if (weapEntryData->IsPoisoned() && weapEntryData->extraLists) {
             if (auto extraData = weapEntryData->extraLists->front()) {
                 if (auto poisonData = extraData->GetByType<RE::ExtraPoison>()) {
@@ -221,9 +234,9 @@ RE::ExtraPoison* u_get_pc_poison()
     return nullptr;
 }
 
-void u_remove_pc_poison()
+void u_remove_pc_poison (bool is_left_hand)
 {
-    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(false)) {
+    if (auto weapEntryData = RE::PlayerCharacter::GetSingleton()->GetEquippedEntryData(is_left_hand)) {
         if (weapEntryData->IsPoisoned() && weapEntryData->extraLists) {
             if (auto extraData = weapEntryData->extraLists->front()) {
                 if (auto poisonData = extraData->GetByType<RE::ExtraPoison>()) {
@@ -307,15 +320,15 @@ RE::GFxMovie* getConsoleMovie() {
 
 std::string u_get_entered_console_commands()
 {
-    std::string result = "Console entered - ";
+    std::string result = "Console - ";
     if (const auto consoleMovie = getConsoleMovie()) 
 	{
         RE::GFxValue commandsVal;
-        consoleMovie->GetVariable (&commandsVal, "_global.Console.ConsoleInstance.Commands");
+        consoleMovie->GetVariable (&commandsVal, "_global.Console.ConsoleInstance.Commands");  // stores this session console entries
        
         if (commandsVal.IsArray()) {
             const auto size = commandsVal.GetArraySize();
-            if   (size == 0) result += "no commands used; ";
+            if   (size == 0) result += "nothing; ";
 			else
 			{
 				for (int i = 0; i < size; i++) {

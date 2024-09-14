@@ -54,6 +54,7 @@ private:
     static float new_func(RE::Actor* a_actor)
     {
         float hiddenMult = old_func(a_actor);
+
         if (a_actor->IsPlayerRef() && mys::dodge_timer > 0)
         {
             mys::dodge_timer -= mys::time_delta;

@@ -12,6 +12,7 @@ if(DEFINED ENV{SKYRIM_MODS_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_MODS_FOLDER}")
 endif()
 
 set(headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/GamePtr.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/ActionManager.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/core.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/gameplay.h

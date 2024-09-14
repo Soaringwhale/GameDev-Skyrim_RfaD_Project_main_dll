@@ -40,8 +40,9 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
                     //bool isPressed  = buttonEvent->value != 0 && duration >= 0;
                     //bool isReleased = buttonEvent->value == 0 && duration != 0;
 
-					if (keyCode != 17)																// for [W]
-						mys::handle_keyPress(keyCode, duration, buttonEvent->IsUp());
+                    
+                    if (keyCode != 17)        // for [W] 
+						mys::handle_keyPress(keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
 					
 
                     //if (isPressed) {

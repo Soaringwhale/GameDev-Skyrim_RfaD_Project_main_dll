@@ -5,14 +5,20 @@
 #include <vector>
 
 
-#define DEBUG_LOGS 1							//  DEBUG ON/OFF
+#define DEBUG_LOGS 1                            //  DEBUG ON/OFF
 
-#if	    DEBUG_LOGS
- #define LOG(...)  SKSE::log::info(__VA_ARGS__)		//  if DEBUG_LOGS, __VA_ARGS__ for any arguments
+#if        DEBUG_LOGS
+ #define LOG(...)  SKSE::log::info(__VA_ARGS__)        //  if DEBUG_LOGS, __VA_ARGS__ for any arguments
 #else
- #define LOG(...)				// if !DEBUG_LOGS,  then LOG() = nothing
+ #define LOG(...)                // if !DEBUG_LOGS,  then LOG() = nothing
 #endif
 
+
+// «јћ≈Ќ»“№ “јЅџ Ќј ѕ–ќЅ≈Ћџ дл€ GitHub:
+// 1) CTRL + H
+// 2) нажать иконку .* дл€ поиска с исп. регул€рных выражений
+// 3) найти [\t]
+// 4) заменить на *4 пробела*
 
 auto u_form_has_keyword(const RE::TESForm* form, const RE::BGSKeyword* keyword) -> bool;
 
@@ -42,7 +48,7 @@ auto u_dispel_effect_from_actor(RE::ActiveEffect* effect, RE::Actor* actor) -> b
 
 auto u_get_secondary_resist_name(const RE::MagicItem *magic_item) -> RE::ActorValue;
 
-auto u_enchant_equipped_weapon(RE::InventoryChanges*, RE::TESBoundObject*, RE::ExtraDataList*, RE::EnchantmentItem*, int16_t) -> RE::ExtraDataList*;
+auto u_enchant_equipped_weapon (RE::InventoryChanges*, RE::TESBoundObject*, RE::ExtraDataList*, RE::EnchantmentItem*, int16_t) -> RE::ExtraDataList*;
 
 auto u_get_actor_value_max(RE::Actor* actor, const RE::ActorValue av) -> float;
 
@@ -64,9 +70,11 @@ void u_updQuestTextGlob (RE::TESQuest* quest, RE::TESGlobal *glob);
 
 auto u_get_actors_weap_ench (RE::Actor* a, bool left) -> RE::EnchantmentItem*;
 
-auto u_get_pc_poison() -> RE::ExtraPoison*;
+void u_remove_weap_ench (RE::InventoryEntryData *entry);
 
-void u_remove_pc_poison();
+auto u_get_pc_poison(bool is_left_hand) -> RE::ExtraPoison*;
+
+void u_remove_pc_poison(bool is_left_hand);
 
 auto u_get_worn_equip_weight(RE::Actor* actor) -> float;
 
@@ -106,10 +114,13 @@ namespace Utils_anim_namespace
         kAttackWinEnd = 16,
         kBowZoomStart = 17,
         kAttackStop = 18,
+        kAttackPowerLeft_FXstart = 19,
+        kAttackPowerRight_FXstart = 20,
+        kAttackPowerStanding_FXstart = 21,
         kNone = 99
     };
 
-    constexpr inline std::string_view  WEAPON_SWING  = "weaponSwing"sv;					
+    constexpr inline std::string_view  WEAPON_SWING  = "weaponSwing"sv;                    
     constexpr inline std::string_view  WEAPON_SWING_LEFT = "weaponLeftSwing"sv;
     constexpr inline std::string_view  JUMP_UP = "JumpUp"sv;
     constexpr inline std::string_view  BOW_DRAW_START = "bowDrawStart"sv;
@@ -125,13 +136,17 @@ namespace Utils_anim_namespace
     constexpr inline std::string_view  WEAP_EQUIP_OUT = "WeapEquip_Out"sv;
     constexpr inline std::string_view  BOW_ZOOM_STOP = "BowZoomStop"sv;
     constexpr inline std::string_view  BOW_ZOOM_START = "BowZoomStart"sv;
-	constexpr inline std::string_view  ATK_WIN_START = "AttackWinStart"sv;
+    constexpr inline std::string_view  ATK_WIN_START = "AttackWinStart"sv;
     constexpr inline std::string_view  ATK_WIN_END = "AttackWinEnd"sv;
     constexpr inline std::string_view  ATK_STOP = "attackStop"sv;
+
+    constexpr inline std::string_view PWATK_LEFT_START  = "AttackPowerLeft_FXstart"sv;
+    constexpr inline std::string_view PWATK_RIGHT_START = "AttackPowerRight_FXstart"sv;
+    constexpr inline std::string_view PWATK_STAND_START = "AttackPowerStanding_FXstart"sv;
     
 
     static std::map <std::string_view, AnimationEvent>  animation_map
-	{
+    {
         {WEAPON_SWING,      AnimationEvent::kWeaponSwing},
         {WEAPON_SWING_LEFT, AnimationEvent::kWeaponLeftSwing},
         {JUMP_UP,           AnimationEvent::kJumpUp},
@@ -142,29 +157,33 @@ namespace Utils_anim_namespace
         {PRE_HIT_FRAME,     AnimationEvent::kPreHitFrame},
         {HIT_FRAME,         AnimationEvent::kHitFrame},
         {BOW_RELEASE,       AnimationEvent::kBowRelease},
-        {ARROW_DETACH,		AnimationEvent::kArrowDetach},
-        {INTERRUPT_CAST,	AnimationEvent::kInterruptCast},
+        {ARROW_DETACH,        AnimationEvent::kArrowDetach},
+        {INTERRUPT_CAST,    AnimationEvent::kInterruptCast},
         {BOW_DRAW,          AnimationEvent::kBowDraw},
-        {WEAP_EQUIP_OUT,	AnimationEvent::kWeapEquip_Out},
-        {BOW_ZOOM_STOP,		AnimationEvent::kBowZoomStop},
+        {WEAP_EQUIP_OUT,    AnimationEvent::kWeapEquip_Out},
+        {BOW_ZOOM_STOP,        AnimationEvent::kBowZoomStop},
         {BOW_ZOOM_START,    AnimationEvent::kBowZoomStart},
-        {ATK_WIN_START,		AnimationEvent::kAttackWinStart},
-		{ATK_WIN_END,		AnimationEvent::kAttackWinEnd},
-        {ATK_STOP,		    AnimationEvent::kAttackStop}
-	};
+        {ATK_WIN_START,        AnimationEvent::kAttackWinStart},
+        {ATK_WIN_END,        AnimationEvent::kAttackWinEnd},
+        {ATK_STOP,            AnimationEvent::kAttackStop},
+        {PWATK_LEFT_START,  AnimationEvent::kAttackPowerLeft_FXstart},
+        {PWATK_RIGHT_START, AnimationEvent::kAttackPowerRight_FXstart},
+        {PWATK_STAND_START, AnimationEvent::kAttackPowerStanding_FXstart}
+
+    };
 
     auto try_find_animation(const std::string& key) -> AnimationEvent;
 
 }  // namespace Utils_anim_namespace
 
 
-class BGSEntryPointFunctionDataTwoValue : public RE::BGSEntryPointFunctionData {			//   исп. дл€ хранени€ данных функции ентри с 2 слотами, к примеру выбор AV и выбор множител€.
+class BGSEntryPointFunctionDataTwoValue : public RE::BGSEntryPointFunctionData {            //   исп. дл€ хранени€ данных функции ентри с 2 слотами, к примеру выбор AV и выбор множител€.
 public:
     inline static constexpr auto VTABLE = RE::VTABLE_BGSEntryPointFunctionDataTwoValue;
     inline static constexpr auto RTTI = RE::RTTI_BGSEntryPointFunctionDataTwoValue;
 
-    float data1;					// 08 - DATA
-    float data2;					// 0C
+    float data1;                    // 08 - DATA
+    float data2;                    // 0C
 };
 static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
 
@@ -173,31 +192,31 @@ static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
 
         template <typename T>
         inline RE::GPtr<T> GetMenu()
-		{
+        {
             auto ui = RE::UI::GetSingleton();
             return ui->GetMenu<T>(T::MENU_NAME);
         }
 
         class MyMessageBox
-		{
-            class MessageBoxResultCallback : public RE::IMessageBoxCallback		// inherit from IMessageBoxCallback
-			{
+        {
+            class MessageBoxResultCallback : public RE::IMessageBoxCallback        // inherit from IMessageBoxCallback
+            {
                 std::function<void(unsigned int)> _callback;
 
               public:
                 ~MessageBoxResultCallback() override 
-				{ /**/ }
-                MessageBoxResultCallback(std::function<void(unsigned int)> callback) : _callback(callback)		// recieves func pointer and fills field _callback
-				{ /**/ }
+                { /**/ }
+                MessageBoxResultCallback(std::function<void(unsigned int)> callback) : _callback(callback)        // recieves func pointer and fills field _callback
+                { /**/ }
 
-                void Run (RE::IMessageBoxCallback::Message message) override {			// run() recieves message and calls _callback
+                void Run (RE::IMessageBoxCallback::Message message) override {            // run() recieves message and calls _callback
                     _callback(static_cast<unsigned int>(message));
                 }
             };
 
          public:
             static void Show (const std::string& bodyText, std::vector<std::string> buttonTextValues, std::function<void(unsigned int)> callback)
-			{
+            {
                 auto* factoryManager = RE::MessageDataFactoryManager::GetSingleton();
                 auto* uiStringHolder = RE::InterfaceStrings::GetSingleton();
                 auto* factory = factoryManager->GetCreator<RE::MessageBoxData>(uiStringHolder->messageBoxData);
@@ -211,7 +230,7 @@ static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
             }
 
             static void Show (RE::BGSMessage* msg, std::function<void(unsigned int)> callback)
-			{
+            {
                 RE::BSString descr;
                 msg->GetDescription(descr, msg->ownerQuest);
 
@@ -230,12 +249,12 @@ static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
 
     // вручную прогнать значение через ентри перков актера, к примеру прогнать урон через все mod incoming damage, либо спел через все mod incoming spell magnitude
 
-    // float damage_resist = 1.f;	//  сюда по ссылке вернетс€ множитель после прогона через ентри 
-	// RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, hit_data->aggressor,  hit_data->weapon,  std::addressof(damage_resist));
+    // float damage_resist = 1.f;    //  сюда по ссылке вернетс€ множитель после прогона через ентри 
+    // RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, hit_data->aggressor,  hit_data->weapon,  std::addressof(damage_resist));
     // дл€ спела они другие
 
     // RE::TESObjectWEAP *playerWeap = form->As<RE::TESObjectWEAP>();
-	// .As<>() - — —≈шный способ приведени€, шаблонный метод, внутри там cast RE::TESObjectWEAP *playerWeap = static_cast<RE::TESObjectWEAP*>(form); 
+    // .As<>() - — —≈шный способ приведени€, шаблонный метод, внутри там cast RE::TESObjectWEAP *playerWeap = static_cast<RE::TESObjectWEAP*>(form); 
     // c++ способ приведени€ через cast напр€мую, должен тоже работать.
 
     // RE::Effect*

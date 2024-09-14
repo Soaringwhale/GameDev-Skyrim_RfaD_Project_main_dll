@@ -9,18 +9,16 @@
 
 
 
-
-
 namespace gameplay 
 {
 
-   float get_oil_scale_mult (RE::Actor* pl, RE::AlchemyItem* oil)
+   float oil_perks_mult (RE::Actor* pl, RE::AlchemyItem* oil)
    {
        float mult = 1.f;
        if (pl->HasPerk(alch_poison_25_perk)) mult *= (1.f + (pl->GetActorValue(RE::ActorValue::kAlchemy) * 0.01f));
-       if (pl->HasPerk(alch_100_perk))       mult *= 1.2f;
-       if (oil->HasKeyword(oil_improvedKW))  mult *= 1.2f;
-       else if (oil->HasKeyword(oil_pureKW)) mult *= 1.4f;
+       if (pl->HasPerk(alch_poison_50_perk)) mult *= 1.2f;
+       //if (oil->HasKeyword(oil_improvedKW))  mult *= 1.2f;
+       //else if (oil->HasKeyword(oil_pureKW)) mult *= 1.4f;
        return mult;
    }
 
@@ -28,8 +26,11 @@ namespace gameplay
    {
       LOG("called oil_proc");
 	  
-      auto poisonData = u_get_pc_poison();
-      if (!poisonData) return false;
+      auto poisonData = u_get_pc_poison(false);  // check right hand
+      if (!poisonData) {
+           poisonData = u_get_pc_poison(true);   // check left hand
+           if (!poisonData) return false;
+      }
       auto oil = poisonData->poison;                             // alchItem oil
       if (!oil || oil->effects.empty()) return false;
       auto oil_id = oil->effects[0]->baseEffect->formID;         // id of effectSetting
@@ -50,40 +51,44 @@ namespace gameplay
 
       float part = charges/max_charge;       // for ex 90/120 charges remained, part = 0.75
       float debuff = (1-part)*0.8f;          // (1 - 0.75)/*0.8 = 0.2
-      if (pl->HasPerk(alch_poison_50_perk)) debuff *= 0.7f;   // decrease debuff with perk
-      
-      ef -= debuff;  // 1 - 0.2 = 0.8  (charge-dependent debuff)
+      if (pl->HasPerk(alch_poison_50_perk)) debuff *= 0.7f;   // decrease debuff from perks
+      if (pl->HasPerk(alch_100_perk))       debuff *= 0.7f;   //
+      ef -= debuff;      // 1 - 0.2 = 0.8  (charge-dependent debuff)
 
 	  //LOG("oil_proc: charges remain - {}, part - {}, debuff - {}, charge-dependent efficiency - {}", charges, part, debuff, ef);
 
       if (oil_id == oil_silver->formID)    // silver oil
       {
-          if (target->HasKeyword(actorTypeUndead))
+          if (target->HasKeyword(actorTypeUndead) || target->HasKeyword(vampire.p))
           {
-              float realMagn = 5.1f * get_oil_scale_mult(pl, oil);      // 100 alch + all perks will make ~17
+ 			  float firstMagn  = silverDust1.p->effects[0]->effectItem.magnitude * ef * oil_perks_mult(pl, oil);  // 5.1   (~17 with all perks and ef 1.4)
+              float secondMagn = silverDust2.p->effects[0]->effectItem.magnitude * ef * oil_perks_mult(pl, oil);  // 3.12  (~10)
+			  // firstMagn = 17 for flat damage and non-silver buff, secondMagn = 10 for dmg percent and debuff penetr
               if (!hit_data->weapon->HasKeyword(weapMaterialSilver))
               {
-                  hit_data->totalDamage *= (1.f + realMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
+                  hit_data->totalDamage *= (1.f + firstMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
               }
-              float dotDmg = realMagn + (hit_data->totalDamage * 0.05f);  // 17 + 5% of dmg
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverBurn, false, target, 1.f, false, dotDmg*ef, pl);
+              float dotDmg = firstMagn + (hit_data->totalDamage*(secondMagn*0.01f));  // 17 + 10% of dmg
+              //LOG("SILVER_OIL: hit_data->totalDamage - {}, final dotDmg - {}, charge_based_mult - {}, flat_magn_oil_perks_scaled - {}", hit_data->totalDamage, dotDmg, ef, realMagn);
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverDust1.p, false, target, 1.f, false, dotDmg, pl);
+			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverDust2.p, false, target, 1.f, false, secondMagn, pl);
           }
       }
       else if (oil_id == oil_disease->formID)   // disease oil
       {
           auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // ignores 50% of disease res, 100% res will make 50% effnss
           float effnss = (1.f - (diseaseRes / 200.f));
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss*ef, false, 0.f, pl);
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss*ef, false, 0, pl);
       }
       else if (oil_id == oil_ignite->formID)    // ignite oil
       {   
           // decrease fire res
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0.f, pl);                 
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0, pl);                 
           int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
           if (fireRes < -30) fireRes = -30;
           int random = rand() % (fireRes+50);
           if (random < 15)   // ignite chance
-			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit2, false, target, ef, false, 0.f, pl);
+			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit2, false, target, ef, false, 0, pl);
       }
       else if (oil_id == oil_frost->formID)     // frost oil
       {    
@@ -91,7 +96,7 @@ namespace gameplay
           if (frostRes < -10) frostRes = -10;
           int random = rand() % (frostRes+40);
           if (random < 10 && !target->HasMagicEffect(oil_KWHolder))
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_frostOnHit, false, target, ef, false, 0.f, pl);
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_frostOnHit, false, target, ef, false, 0, pl);
           return true;   // convert dmg to frost in core.cpp
       }
       else if (oil_id == oil_poison->formID)     // poison oil
@@ -101,19 +106,20 @@ namespace gameplay
           float effnss = (1.f - (poisonRes / 100.f));
           int random = rand() % 10;
           if (random < 4) {
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss*ef, false, 0.f, pl);
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss*ef, false, 0, pl);
           }
       }
       else if (oil_id == oil_garlic->formID)    // garlic oil
       {    
-          if (target->HasSpell(vampirism) && !target->HasMagicEffect(oilGarlicMarker))
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_garlicOnHit, false, target, ef, false, 0.f, pl);
+          if (!target->HasMagicEffect(oilGarlicMarker) && (target->HasSpell(vampirism) || target->HasKeyword(vampire.p))) {
+              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_garlicOnHit, false, target, ef, false, 0, pl);
+          }
       }
 	  else if (oil_id == oil_corrose->formID)    // corrose oil
       {    
-          float realMagn = 0.03f * get_oil_scale_mult(pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
+          float realMagn = 0.03f * ef * oil_perks_mult (pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
           float armorDmg = target->GetActorValue(RE::ActorValue::kDamageResist) * realMagn;     
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_corroseOnHit, false, target, ef, false, armorDmg, pl);
+          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_corroseOnHit, false, target, 1.f, false, armorDmg, pl);
           hit_data->totalDamage *= (1.f - realMagn);  // reduce dmg, for ex *= 0.9
       }
       
@@ -122,8 +128,6 @@ namespace gameplay
 
    void windRunnerCheck(RE::Actor* pl)
    {
-      if (pl->HasMagicEffect(my::adrenalineKD)) return;
-
       if (pl->HasPerk(windRunnerPerk))
       {
           float maxHP = u_get_actor_value_max(pl, RE::ActorValue::kHealth);
@@ -160,7 +164,7 @@ namespace gameplay
 
       if (fightID == 1)  // olve   // make enum
       {
-          if (olveState == 0 && counter >= 6)  // pre-shield / 12 sec
+          if (olveState == 0 && counter >= 7)  // pre-shield / 14 sec
           {
               //u_playSound(mys::player, olvePreShieldVoice, 2.f);
               u_cast_on_self(olvePreShield, currBoss);
@@ -218,10 +222,6 @@ namespace gameplay
       oil_KWHolder    = handler->LookupForm<RE::EffectSetting>(0x1FFBCA, "RfaD SSE - Awaken.esp");
 	  oil_improvedKW  = handler->LookupForm<RE::BGSKeyword>(0x21912E, "RfaD SSE - Awaken.esp");
       oil_pureKW      = handler->LookupForm<RE::BGSKeyword>(0x21E298, "RfaD SSE - Awaken.esp");
-
-	  
-
-	  silverBurn = handler->LookupForm<RE::SpellItem>(0xFA4B56, "RfaD SSE - Awaken.esp");
   
 	  olveShield = handler->LookupForm<RE::SpellItem>(0xD01250, "RfaD SSE - Awaken.esp");
 
@@ -307,6 +307,7 @@ namespace qst
         stonesBuffStopDay = handler->LookupForm<RE::TESGlobal>(0x6D0994, "devFixes.esp");
         aedraToken = handler->LookupForm<RE::BGSPerk>(0xE460B, "Requiem for a Dream - DivineBlessings.esp");
         daedraToken = handler->LookupForm<RE::BGSPerk>(0xE460C, "Requiem for a Dream - DivineBlessings.esp");
+        pal_ring = handler->LookupForm<RE::TESObjectARMO>(0x145AD3, "devFixes.esp");
 
         chihNamiraCult1 = handler->LookupForm<RE::TESFaction>(0x2F6CEE, "ChihSkillTree.esp");
         chihNamiraCult2 = handler->LookupForm<RE::TESFaction>(0x2F6CEF, "ChihSkillTree.esp");
@@ -391,6 +392,8 @@ float  getContractsDone () {
 
 bool vigharMovarthDead() { return (qst::isVigharDead->value > 0 && qst::MS14->currentStage > 100); }
 
+bool sephirothDead() { return (qst::sephirothQuest->IsCompleted() || qst::sephirothQuest->currentStage > 50);  }
+
 bool dbcontractsDone() { return (qst::DBc1->currentStage>20 && qst::DBc2->currentStage>20 && qst::DBc3->currentStage>20);}
 
 bool vampArtifacts() { return (qst::DLC1RV08->currentStage >= 200 && qst::DLC1RV09->currentStage >= 200); }
@@ -402,6 +405,8 @@ bool allArchLichesDead() { return (qst::isAnachoretDead->value && qst::isSiltine
 bool conjRitualQuestDone() { return (RE::TESForm::LookupByID<RE::TESQuest>(0x99F27)->currentStage > 100); }
 
 bool equippedConjurPhylactery() { return u_worn_has_keyword(mys::player, qst::conjPhylact); }
+
+bool has_pal_ring() { return u_get_item_count(mys::player, qst::pal_ring->formID) > 0; }
 
 
 bool hasMagicAdeptPerk()
@@ -621,12 +626,13 @@ int daedra_artifacts_have ()
 bool chosenDaedra_fullPerks_n_quest()
 {
     bool ok_ = false;
-    if (mys::player->HasPerk(qst::cult_boethia_2) && qst::DA02->currentStage > 30)   ok_ = true;
-    if (mys::player->HasPerk(qst::cult_mephala_2) && qst::DA08->currentStage > 40)   ok_ = true;
-    if (mys::player->HasPerk(qst::cult_vermina_2) && qst::DA16->currentStage > 197)  ok_ = true;
-    if (mys::player->HasPerk(qst::cult_nocturn_2) && qst::TG09->currentStage > 50)   ok_ = true;
-    if (mys::player->HasPerk(qst::cult_meridia_2) && qst::DA09->currentStage > 350)  ok_ = true;
-    if (mys::player->HasPerk(qst::cult_azura_2)   && qst::DA01->currentStage > 85)   ok_ = true;
+    if (mys::player->HasPerk(qst::cult_boethia_2)  && qst::DA02->currentStage > 30)   ok_ = true;
+    if (mys::player->HasPerk(qst::cult_mephala_2)  && qst::DA08->currentStage > 40)   ok_ = true;
+    if (mys::player->HasPerk(qst::cult_vermina_2)  && qst::DA16->currentStage > 197)  ok_ = true;
+    if (mys::player->HasPerk(qst::cult_nocturn_2)  && qst::TG09->currentStage > 50)   ok_ = true;
+    if (mys::player->HasPerk(qst::cult_meridia_2)  && qst::DA09->currentStage > 350)  ok_ = true;
+    if (mys::player->HasPerk(qst::cult_azura_2)    && qst::DA01->currentStage > 85)   ok_ = true;
+    if (mys::player->HasPerk(qst::cult_namira_2.p) && qst::DA11->currentStage > 60)   ok_ = true;
     return ok_;
 }
 
@@ -693,7 +699,7 @@ namespace qst
         else if (stage == 20 && qst::DBDestroy->currentStage > 30)  setStage(this_, 30);   // [3] destroy DB
         else if (stage == 30 && priestsHelped() > 4)                setStage(this_, 40);   // [4] help priests x5
         else if (stage == 40 && qst::DA10->currentStage > 65)       setStage(this_, 50);   // [5] help tyranus
-      //else if (stage == 50 && ring_paladin_papyrus)               setStage(this_, 60);   // [6] ring of paladin
+        else if (stage == 50 && has_pal_ring())                     setStage(this_, 60);   // [6] ring of paladin
         else if (stage == 60 && qst::currGoalVal->value > 14)       setStage(this_, 70);   // [7] slay necrs x15
         else if (stage == 70 && qst::isAnachoretDead->value > 0)    setStage(this_, 80);   // [8] anachoret
         else if (stage == 80 && essence_found() > 2)                setStage(this_, 90);   // [9] find 3 essence
@@ -712,7 +718,7 @@ namespace qst
         else if (stage == 60 && qst::currGoalVal->value > 19)         setStage(this_, 70);   // [7] vampires x20
         else if (stage == 70 && qst::isNamiraBossDead->value)         setStage(this_, 80);   // [8] namira canal boss
         else if (stage == 80 && vigharMovarthDead())                  setStage(this_, 90);   // [9] vighar & movart
-        else if (stage == 90 && qst::sephirothQuest->currentStage>50) setStage(this_, 100);  // [10] sephiroth
+        else if (stage == 90 && sephirothDead())                      setStage(this_, 100);  // [10] sephiroth
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startDB->currentStage > 0)        //  [ASSASSIN]
