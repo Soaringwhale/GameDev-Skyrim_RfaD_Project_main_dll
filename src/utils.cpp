@@ -44,7 +44,7 @@ auto u_get_weapon(const RE::Actor *actor, const bool is_left_hand) -> RE::TESObj
     return weapon;
 }
 
-auto u_get_eff_second_av_name(const RE::ActiveEffect& active_effect) -> RE::ActorValue
+auto u_get_eff_second_av_name (const RE::ActiveEffect& active_effect) -> RE::ActorValue
 {
     if (!active_effect.effect || !active_effect.effect->baseEffect) {
         return RE::ActorValue::kNone;
@@ -66,25 +66,41 @@ auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> flo
 }
 
 
-auto u_actor_has_active_mgef_with_keyword(RE::Actor *actor, const RE::BGSKeyword *keyword) -> bool 
+auto u_actor_has_active_mgef_with_keyword (RE::Actor *actor, const RE::BGSKeyword *keyword) -> bool 
 {
     auto active_effects = actor->GetActiveEffectList();   // list
     if (!active_effects) {
         return false;
     }
-    for (const auto active_effect : *active_effects)
+    for (const auto ef : *active_effects)
     {
-        if (!active_effect || active_effect->flags.any(RE::ActiveEffect::Flag::kInactive) || !active_effect->effect ||
-            !active_effect->effect->baseEffect) {
+        if (!ef || ef->flags.any(RE::ActiveEffect::Flag::kInactive) || !ef->effect || !ef->effect->baseEffect) {
             continue;
         }
-        const auto base_effect = active_effect->effect->baseEffect;
-
-        if (base_effect->HasKeyword(keyword)) {
+        if (ef->effect->baseEffect->HasKeyword(keyword)) {
             return true;
         }
     }
     return false;
+}
+
+auto u_same_activeEffects_count (RE::Actor *actor, const RE::EffectSetting *base_eff) -> uint32_t
+{
+    auto active_effects = actor->GetActiveEffectList();   // list
+    if (!active_effects) return 0;
+
+    uint32_t count = 0;
+    for (const auto ef : *active_effects)
+    {
+        //SKSE::log::info("name - {}", ef->effect->baseEffect->GetName());
+        if (!ef || ef->flags.any(RE::ActiveEffect::Flag::kInactive) || !ef->effect || !ef->effect->baseEffect) {
+            continue;
+        }
+        if (ef->effect->baseEffect->formID == base_eff->formID) {
+            count ++;
+        }
+    }
+    return count;
 }
 
 auto u_cast (RE::SpellItem *spell, RE::Actor *target, RE::Actor *caster) -> void
@@ -142,7 +158,7 @@ auto u_get_effects_by_keyword (RE::Actor *actor, const RE::BGSKeyword *keyword) 
 
     for (auto active_effect : *active_effects) {
         if (!active_effect || active_effect->flags.any(RE::ActiveEffect::Flag::kInactive) || 
-			!active_effect->effect || !active_effect->effect->baseEffect) {
+            !active_effect->effect || !active_effect->effect->baseEffect) {
             continue;
         }
 
@@ -154,7 +170,7 @@ auto u_get_effects_by_keyword (RE::Actor *actor, const RE::BGSKeyword *keyword) 
 
         effects.push_back(active_effect);
     }
-    return effects;		//  vector of  RE::ActiveEffect*
+    return effects;        //  vector of  RE::ActiveEffect*
 }
 
 
@@ -186,10 +202,10 @@ auto u_enchant_equipped_weapon (RE::InventoryChanges* changes, RE::TESBoundObjec
 
 RE::EnchantmentItem* u_get_actors_weap_ench (RE::Actor* actor, bool left)
 {
-    auto inv = actor->GetInventory ([](RE::TESBoundObject& obj) { if(obj.IsWeapon()) return true; else return false;} );	 // lambda (boolean function-filter)  
-	//   inv - map of inventory items {item, data}
+    auto inv = actor->GetInventory ([](RE::TESBoundObject& obj) { if(obj.IsWeapon()) return true; else return false;} );     // lambda (boolean function-filter)  
+    //   inv - map of inventory items {item, data}
     bool checkleft = false;
-    for (auto& [item, data] : inv) {		 // range-based cycle for map
+    for (auto& [item, data] : inv) {         // range-based cycle for map
         const auto& [count, entry] = data;
         if (entry->extraLists) {
             for (const auto& xList : *entry->extraLists) {
@@ -249,8 +265,8 @@ void u_remove_pc_poison (bool is_left_hand)
 
 void u_kill_projectile(RE::Projectile* proj)
 {
-	REL::Relocation<decltype(u_kill_projectile)> func (REL::ID(42930));
-	func(proj);
+    REL::Relocation<decltype(u_kill_projectile)> func (REL::ID(42930));
+    func(proj);
 }
 
 bool u_setStage (RE::TESQuest* quest, uint16_t stage)
@@ -289,9 +305,26 @@ int32_t u_get_item_count (RE::Actor *actor, uint32_t formid_)
     return 0;
 }
 
+int32_t u_PapyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) // can check references (if the object ref is persistent, it exists in a container as a reference)
+{
+    std::int32_t result = 0;
+    if (cont)
+         if (auto boundObject = cont->GetBaseObject(); boundObject) // check container ref's base obj, is it valid TESBoundObject
+            if (auto formtype = boundObject->formType.underlying(); formtype == 0x1C || formtype == 0x2B) {  // 0x1C == TESObjectCONT, 0x2B == TESNPC, only these forms are valid
+                bool isBound = skyrim_cast<RE::TESBoundObject*>(item) != nullptr;
+                bool isReference = skyrim_cast<RE::TESObjectREFR*>(item) != nullptr; // now check item, cast TESForm to -> TESBoundObject and TESObjectREFR
+                if (isBound || isReference) {
+                    using func_t = std::int32_t (*)(RE::TESObjectREFR*, RE::TESForm*, std::int64_t, std::int32_t);
+                    REL::Relocation<func_t> func {REL::VariantID (56062, 56497, 0x9E4710)};
+                    result = func (cont, item, NULL, NULL);
+                }
+            }
+    return result;
+}
+
 bool u_is_in_city (RE::Actor* actor)
 {
-    auto cityKW = RE::TESForm::LookupByID<RE::BGSKeyword>(0x13168);		// big cities
+    auto cityKW = RE::TESForm::LookupByID<RE::BGSKeyword>(0x13168);        // big cities
     if (actor->GetCurrentLocation() && actor->GetCurrentLocation()->HasKeyword(cityKW)) return true;
     else return false;
 }
@@ -305,7 +338,7 @@ bool get_miscStat (RE::BSFixedString& statName, int& o_value)
 
 int u_get_game_statistic (std::string statName) 
 {
-	int val = 0;
+    int val = 0;
     RE::BSFixedString f_statName = statName;
     get_miscStat(f_statName, val);
     return val;
@@ -322,22 +355,22 @@ std::string u_get_entered_console_commands()
 {
     std::string result = "Console - ";
     if (const auto consoleMovie = getConsoleMovie()) 
-	{
+    {
         RE::GFxValue commandsVal;
         consoleMovie->GetVariable (&commandsVal, "_global.Console.ConsoleInstance.Commands");  // stores this session console entries
        
         if (commandsVal.IsArray()) {
             const auto size = commandsVal.GetArraySize();
-            if   (size == 0) result += "nothing; ";
-			else
-			{
-				for (int i = 0; i < size; i++) {
-					RE::GFxValue val;
-					commandsVal.GetElement(i, &val);
+            if   (size == 0) result += "N/A; ";
+            else
+            {
+                for (int i = 0; i < size; i++) {
+                    RE::GFxValue val;
+                    commandsVal.GetElement(i, &val);
                     if (val.IsString()) {
                         result += std::string(val.GetString()) + "; ";
                     }
-				}  
+                }  
             }
         }
     }
@@ -369,12 +402,12 @@ float u_get_worn_equip_weight (RE::Actor* actor)
             eq_weight += weapon_r->weight;
             return eq_weight;
         }
-		else eq_weight += weapon_r->weight;
+        else eq_weight += weapon_r->weight;
     }
 
     if (weapon_l) eq_weight += weapon_l->weight;  
 
-	return eq_weight;
+    return eq_weight;
 }
 
 
@@ -398,7 +431,7 @@ void u_damage_av (RE::Actor* actor, RE::ActorValue av, float magn)
 }
 
 
-RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)	//  second resist is usually mag res, except poisons
+RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)    //  second resist is usually mag res, except poisons
 {
     if (magic_item->IsPoison()) {
         return RE::ActorValue::kPoisonResist;
@@ -464,46 +497,56 @@ RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)	// 
     return stream.str();
  }
 
+ float u_req_inc_damage ()  // requiem damage taken like x1.5
+ {
+    return RE::GameSettingCollection::GetSingleton()->GetSetting("fDiffMultHPToPCL")->GetFloat();
+ }
+
+ float u_req_out_damage ()
+ {
+    return RE::GameSettingCollection::GetSingleton()->GetSetting("fDiffMultHPByPCL")->GetFloat();
+ }
+
  void u_log_actor_perk_entries(RE::Actor* actor, RE::BGSPerkEntry::EntryPoint theEntry, std::string entryNameForLog)
  {
 
-	 if (!actor) { LOG("!actor.."); return; }
+     if (!actor) { LOG("!actor.."); return; }
 
-	using PerkEntryFunction = RE::BGSEntryPointPerkEntry::EntryData::Function;
+    using PerkEntryFunction = RE::BGSEntryPointPerkEntry::EntryData::Function;
 
-	int numPerks = actor->GetActorBase()->perkCount;
+    int numPerks = actor->GetActorBase()->perkCount;
 
     for (int i = 0; i < numPerks; i++)
-	{	
-		 RE::BGSPerk* perk = actor->GetActorBase()->perks[i].perk;
-		 if (!perk) continue;
+    {    
+         RE::BGSPerk* perk = actor->GetActorBase()->perks[i].perk;
+         if (!perk) continue;
          for (auto &entry : perk->perkEntries) 
-		 {		
-            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;										//   тут отсеиваем архетипы  ability и quest
+         {        
+            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;                                        //   тут отсеиваем архетипы  ability и quest
             
-			// тут приводим ентри общего архетипа BGSPerkEntry к типу конкретно BGSEntryPointPerkEntry (не ability и quest)
-			RE::BGSEntryPointPerkEntry *entry_point = skyrim_cast<RE::BGSEntryPointPerkEntry*>(entry);	
-			if (entry_point->entryData.entryPoint != theEntry) continue;		//   тут отсеиваем все ентри кроме нужного, например  ModSpellMagnitude
-			if (entry_point->entryData.function == PerkEntryFunction::kMultiplyValue)						//   проверяем мат. функцию нашего PerkEntry
+            // тут приводим ентри общего архетипа BGSPerkEntry к типу конкретно BGSEntryPointPerkEntry (не ability и quest)
+            RE::BGSEntryPointPerkEntry *entry_point = skyrim_cast<RE::BGSEntryPointPerkEntry*>(entry);    
+            if (entry_point->entryData.entryPoint != theEntry) continue;        //   тут отсеиваем все ентри кроме нужного, например  ModSpellMagnitude
+            if (entry_point->entryData.function == PerkEntryFunction::kMultiplyValue)                        //   проверяем мат. функцию нашего PerkEntry
             {
-					// приводим поле ентри ->function_data типа EntryPointFunctionData к конкретному типу EntryPointFunctionDataOneValue (данные функции с 1 слотом)
+                    // приводим поле ентри ->function_data типа EntryPointFunctionData к конкретному типу EntryPointFunctionDataOneValue (данные функции с 1 слотом)
                      RE::BGSEntryPointFunctionDataOneValue* function_data = skyrim_cast<RE::BGSEntryPointFunctionDataOneValue*>(entry_point->functionData);
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: multiply_value by - {}", entryNameForLog, perk->fullName, u_int2hex(perk->formID), function_data->data);
             }
-			else if (entry_point->entryData.function == PerkEntryFunction::kAddValue)		
-			{
+            else if (entry_point->entryData.function == PerkEntryFunction::kAddValue)        
+            {
                      RE::BGSEntryPointFunctionDataOneValue* function_data = skyrim_cast<RE::BGSEntryPointFunctionDataOneValue*>(entry_point->functionData);
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: add_value - {}", entryNameForLog, perk->fullName, perk->formID, function_data->data);
             }
-			else if (entry_point->entryData.function == PerkEntryFunction::kMultiplyActorValueMult)			//  тут в функции уже 2 слота, AV и мульт, значит приводим к типу для 2 слотов
-			{
+            else if (entry_point->entryData.function == PerkEntryFunction::kMultiplyActorValueMult)            //  тут в функции уже 2 слота, AV и мульт, значит приводим к типу для 2 слотов
+            {
                      BGSEntryPointFunctionDataTwoValue* function_data = skyrim_cast<BGSEntryPointFunctionDataTwoValue*>(entry_point->functionData);
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: multiply AV*mult, mult is - {}", entryNameForLog, perk->fullName, u_int2hex(perk->formID), function_data->data2);
             }
-			else if (entry_point->entryData.function == PerkEntryFunction::kMultiply1PlusActorValueMult) {
+            else if (entry_point->entryData.function == PerkEntryFunction::kMultiply1PlusActorValueMult) {
                      BGSEntryPointFunctionDataTwoValue* function_data = skyrim_cast<BGSEntryPointFunctionDataTwoValue*>(entry_point->functionData);
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: multiply 1 + AV*mult, mult is - {}", entryNameForLog, perk->fullName, u_int2hex(perk->formID), function_data->data2);
@@ -518,10 +561,10 @@ RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)	// 
 namespace Utils_anim_namespace
 {
     auto try_find_animation (const std::string &key) -> AnimationEvent
-	{
+    {
         const auto it = animation_map.find(key);
         if (it == animation_map.end())
-				return AnimationEvent::kNone;
+                return AnimationEvent::kNone;
        
         return it->second;
     }
@@ -601,7 +644,7 @@ uint32_t Utils::GamepadMaskToKeycode(uint32_t keyMask) {
     }
 }
 
-TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)			//  обертка над LookupByID()  , возвращает форму по имени мода и id
+TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)            //  обертка над LookupByID()  , возвращает форму по имени мода и id
 {
     if (!modname.length() || !formid) return nullptr;
     TESDataHandler* dh = TESDataHandler::GetSingleton();

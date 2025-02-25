@@ -24,10 +24,10 @@ public:
       
         mys::time_delta = delta;        // for other functions
 
-		mys::micro_timer -= delta;
+        //mys::micro_timer -= delta;
         upd_timer -= delta;
 
-		//if (mys::micro_timer <= 0.f) {
+        //if (mys::micro_timer <= 0.f) {
         //    mys::micro_timer = 1.f;
         //    on_micro_update();           // every 1 sec
         //}
@@ -58,7 +58,7 @@ private:
         if (a_actor->IsPlayerRef() && mys::dodge_timer > 0)
         {
             mys::dodge_timer -= mys::time_delta;
-            hiddenMult += 2;
+            hiddenMult += 2.2f;
         }
         return hiddenMult - mys::ms_compensator;    
     }
@@ -142,9 +142,9 @@ class PhysDamageToActor_Hook     // works just before hit, but can't decline hit
 {
   public:
     static void install_hook()
-     {
+    {
         old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37673).address() + 0x3c0, new_func);
-     }
+    }
 
   private:
      static void new_func(RE::Actor* target, RE::HitData &hit_data)
@@ -247,7 +247,7 @@ public:
 private:
     static void new_func(RE::InventoryEntryData* data, RE::AlchemyItem* poison, int count) {
 
-	   if (data && poison && count > 0) {
+       if (data && poison && count > 0) {
            on_apply_poison(data, poison, count);
        }
        return old_func (data, poison, count);
@@ -434,7 +434,7 @@ private:
                old_func(this_, actor, value, av);  //  если эффект detrimental, вообще не трогаем
                return;
            }
-		   else if (this_->effect->baseEffect->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover)) {
+           else if (this_->effect->baseEffect->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover)) {
                 // если recover, то пропускаем как обычно т.к. это не реген, а например шмотка на макс. ману
                old_func(this_, actor, value, av);
                my::sf_handle_reserved_MP();          // возможно придется пересчитать текущую ману относительно максимальной (можно сократить этот метод)
@@ -498,22 +498,22 @@ public:
 class MenuOpenCloseEventSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 {
 public:
-	virtual RE::BSEventNotifyControl ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
-	{
+    virtual RE::BSEventNotifyControl ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+    {
         if (ev) {
            if (ev->menuName == "Sleep/Wait Menu")
-		   {
+           {
                 if (ev->opening) on_wait_menu_open();
                 else             on_wait_menu_close();
            }
-		   else if (ev->menuName == "InventoryMenu")
-		   {
-			    if (ev->opening) on_inventory_open();
+           else if (ev->menuName == "InventoryMenu")
+           {
+                if (ev->opening) on_inventory_open();
                 else             on_inventory_close();
-		   }
+           }
         }
-		return RE::BSEventNotifyControl::kContinue;
-	}
+        return RE::BSEventNotifyControl::kContinue;
+    }
 
     static MenuOpenCloseEventSink* GetSingleton() {
         static MenuOpenCloseEventSink singleton;
@@ -521,7 +521,7 @@ public:
     }
     void enable()
     { 
-		RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
+        RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
     }
 };
 
@@ -851,7 +851,7 @@ namespace description_hooks
 //-----------------------------------------------------------------------------------------------------
 
 
-static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
+static void SKSEMessageHandler (SKSE::MessagingInterface::Message* message)
 {
     switch (message->type) {
         case SKSE::MessagingInterface::kDataLoaded:            // All ESM/ESL/ESP plugins have loaded, main menu is now active. It is now safe to access form data
@@ -878,13 +878,16 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
            OnDeathEvent::GetSingleton()->enable();            // on  death event
            MenuOpenCloseEventSink::GetSingleton()->enable();  // open/close menu event
 
-		   OnManaPercentRegen_Hook::install_hook();
+           OnManaPercentRegen_Hook::install_hook();
            OnModActorValue_Hook::install_hook();
            OnModPeakActorValue_Hook::install_hook();
            description_hooks::Install_Hooks();   // must be last
            break;
-        case SKSE::MessagingInterface::kPostLoadGame:        // Player's selected save game has finished loading
+        case SKSE::MessagingInterface::kPostLoadGame:        // Player's selected savegame has finished loading
            my::sf_handle_reserved_MP();
+           break;
+        case SKSE::MessagingInterface::kPreLoadGame:         // Log just before savegame loads
+           log_pre_load_game(mys::player);
            break;
         //case SKSE::MessagingInterface::kNewGame:            // new game
         //   OnPlayerUpdate_Hook::install_hook();

@@ -30,7 +30,9 @@ auto u_get_eff_secondary_av_name(const RE::ActiveEffect& active_effect) -> RE::A
 
 auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> float;
 
-auto u_actor_has_active_mgef_with_keyword(RE::Actor* actor, const RE::BGSKeyword* keyword) -> bool;
+auto u_actor_has_active_mgef_with_keyword (RE::Actor* actor, const RE::BGSKeyword* keyword) -> bool;
+
+auto u_same_activeEffects_count (RE::Actor* actor, const RE::EffectSetting* base_eff) -> uint32_t;
 
 auto u_cast (RE::SpellItem *spell, RE::Actor *target, RE::Actor  *caster) -> void;
 
@@ -62,7 +64,9 @@ void u_addItem (RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extra
 
 void u_player_addItem (RE::TESBoundObject* item, int count);
 
-auto u_get_item_count(RE::Actor* actor, uint32_t formid_) -> int32_t;
+auto u_get_item_count (RE::Actor* actor, uint32_t formid_) -> int32_t;
+
+auto u_PapyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) -> int32_t;
 
 bool u_setStage(RE::TESQuest* quest, uint16_t stage);
 
@@ -89,6 +93,10 @@ auto u_get_entered_console_commands() -> std::string;
 auto u_int2hex (int decimal) -> std::string;
 
 void u_SendInventoryUpdateMessage (RE::TESObjectREFR* a_inventoryRef, const RE::TESBoundObject* a_updateObj);
+
+auto u_req_inc_damage() -> float;  // requiem damage taken like x1.5
+
+auto u_req_out_damage() -> float;  // requiem damage dealt like x1.5
 
 
 namespace Utils_anim_namespace

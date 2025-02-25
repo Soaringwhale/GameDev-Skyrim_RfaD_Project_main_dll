@@ -73,9 +73,9 @@ class ItemCardFixer
     };
 
     static void applyDescription (RE::GFxValue a_itemCard)       // a_itemCard это карточка предмета на которое мы условно навелись
-	{
+    {
         //SKSE::log::info("called applyDescription() from fixer.h");
-		// 
+        // 
         // ниже проверки, смотрим различные поля из ui карточек (GetMember)
 
         if (!a_itemCard.IsObject()) return;
@@ -111,7 +111,7 @@ class ItemCardFixer
         //RE::GFxValue itemName;                               // получаем параметр - имя самого предмета
         //a_itemInfo.GetMember("name", &itemName);
         //logger::debug("Fixing up item {} with item type {} using description {}", itemName.GetString(), a_type.GetUInt(), a_description.GetString());
-		// дебаг - например - Обновляем предмет Меч Храмовника с типом 3 и описанием "..."
+        // дебаг - например - Обновляем предмет Меч Храмовника с типом 3 и описанием "..."
 
 
         // к-тор фиксера принимает ПО ССЫЛКЕ itemCard, itemInfo, description. Далее он будет редактировать эти данные конкретного предмета.
@@ -134,7 +134,7 @@ class ItemCardFixer
     }
 
     static void revertDescription (RE::GFxValue a_itemCard)
-	{
+    {
         if (!a_itemCard.IsObject()) return;
         RE::GFxValue a_itemInfo;
         a_itemCard.GetMember(itemInfoVar, &a_itemInfo);

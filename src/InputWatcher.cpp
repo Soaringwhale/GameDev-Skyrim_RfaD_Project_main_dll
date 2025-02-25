@@ -5,19 +5,19 @@
 
 using namespace RE;
 
-BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)		//  ProcessEvent() это непосредственно обработка нажатий.
+BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)        //  ProcessEvent() это непосредственно обработка нажатий.
 {
     if (!*evns) return RE::BSEventNotifyControl::kContinue;
 
-    for (InputEvent *e = *evns;  e;  e = e->next)		//  начинаем идти по InputEvents пока евент (е) истинен
-	{			
+    for (InputEvent *e = *evns;  e;  e = e->next)        //  начинаем идти по InputEvents пока евент (е) истинен
+    {            
         switch (e->eventType.get()) {
             case INPUT_EVENT_TYPE::kButton:
 
                 ButtonEvent* buttonEvent = e->AsButtonEvent();
 
-				if (buttonEvent && buttonEvent->HasIDCode())		//   && (buttonEvent->IsDown() || buttonEvent->IsPressed())
-				{
+                if (buttonEvent && buttonEvent->HasIDCode())        //   && (buttonEvent->IsDown() || buttonEvent->IsPressed())
+                {
                     uint32_t keyMask = buttonEvent->idCode;
                     uint32_t keyCode;
 
@@ -42,8 +42,8 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
 
                     
                     if (keyCode != 17)        // for [W] 
-						mys::handle_keyPress(keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
-					
+                        mys::handle_keyPress(keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
+                    
 
                     //if (isPressed) {
                         // ActionManager::GetSingleton()->OnKeyPressed(keyCode, duration);
@@ -52,7 +52,7 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
                     //} else if (isReleased) {
                         // ActionManager::GetSingleton()->OnKeyReleased(keyCode);
                     //}
-				}
+                }
 
                 
         }

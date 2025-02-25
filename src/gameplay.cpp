@@ -7,46 +7,189 @@
 #include "gameplay.h"
 #include "core.h"
 
+static std::vector<RE::SpellItem*> smalls;
+static std::vector<RE::SpellItem*> meds;     // mutagens
+static std::vector<RE::SpellItem*> bigs;
 
+enum BossFight  // no need enum class, we want to compare with int, and don't want to use BossFight::
+{
+    OlvePre2stage = 101,
+    Olve1stage = 1,
+    Olve2stage = 2,
+    Sephiroth = 3
+};
 
 namespace gameplay 
 {
 
-   float oil_perks_mult (RE::Actor* pl, RE::AlchemyItem* oil)
+   // scale only [ef] magnitude here (charges remain and alchItem keywords - improved/pure) 
+   // alchemy perks scales goes from ck, as well as duration scales
+   void cast_oil (RE::SpellItem* spell, RE::Actor* target, RE::Actor* pl, RE::AlchemyItem* oil, float ef, float magnOverride)
    {
-       float mult = 1.f;
-       if (pl->HasPerk(alch_poison_25_perk)) mult *= (1.f + (pl->GetActorValue(RE::ActorValue::kAlchemy) * 0.01f));
-       if (pl->HasPerk(alch_poison_50_perk)) mult *= 1.2f;
-       //if (oil->HasKeyword(oil_improvedKW))  mult *= 1.2f;
-       //else if (oil->HasKeyword(oil_pureKW)) mult *= 1.4f;
-       return mult;
+       float magn = spell->effects[0]->GetMagnitude() * ef;  // all magnitudes in spell must be the same, because we use override
+       if (magnOverride > 0) magn = magnOverride;
+       //LOG("eff name - {}, effect magn - {}, ef - {}, total magn - {}", spell->effects[0]->baseEffect->fullName, spell->effects[0]->GetMagnitude(), ef, magn);
+       pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(spell, false, target, 1.f, false, magn, pl);
    }
 
-   bool oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, bool isPwatk)
+   void knuckles_block (RE::Actor* agr, RE::Actor* target, float& damage, float blockMod) {
+
+       if (target->HasSpell(knuckles_combo_ON.p)) {
+           u_cast(knuckles_blockedMarkerSelf.p, target, agr);
+       }
+       u_playSound (target, bluntVsOther.p, 1.f);
+       damage *= (1 - blockMod / 200.f);
+   }
+
+   void set_univ_eff (int id, float mag, uint32_t dur)  // knuckles univ spell
+   {
+       knuckles_univ.p->effects[id]->effectItem.magnitude = mag;
+       knuckles_univ.p->effects[id]->effectItem.duration = dur;
+   }
+
+   void knuckles_hit (RE::Actor* agr, RE::Actor* target, RE::TESObjectARMO *hands, float &damage, bool isPwAtk, bool isLeft)
+   { 
+       //LOG("called knuckles_combo()");
+
+       int32_t price = hands->value; // base price
+
+       if (hands->HasKeyword(knuckles_bleeding.p)) {
+           fish_bleed.p->effects[0]->effectItem.magnitude = price/100;  // bleed
+           u_cast (fish_bleed.p, target, agr);
+       }
+       else if (hands->HasKeyword(knuckles_blunt.p))  set_univ_eff (1, price/200, 12);  // armor %
+
+       if (hands->HasKeyword(knuckles_uniq.p))
+       {
+           if      (hands->HasKeyword(armorHide.p))     set_univ_eff (2, 15.f, 1); // st
+           else if (hands->HasKeyword(armorScale.p))    set_univ_eff (7, 15.f, 5); // pois
+           else if (hands->HasKeyword(armorGlass.p))    set_univ_eff (4, 25.f, 3); // shock
+           else if (hands->HasKeyword(armorElven.p))    set_univ_eff (3, 30.f, 3); // fire
+           else if (hands->HasKeyword(armorOrcit.p))    set_univ_eff (2, 20.f, 1); // st
+           else if (hands->HasKeyword(sigvaldSet.p))    set_univ_eff (0, 25.f, 2); // white flame
+           else if (hands->HasKeyword(armorLeather.p)) {set_univ_eff (5, 35.f, 2); set_univ_eff (6, 3.f, 10);}
+       }
+       u_cast (knuckles_univ.p, target, agr);
+      //.......................combo.......................
+       if (!isPwAtk) {
+           u_cast(knuckles_jab_spell.p, target, agr);
+           if (agr->HasMagicEffect(knuckles_afterBlockTimerSelf.p)) {  // hit just afer block
+               RE::DebugNotification("Контрудар");
+               u_playSound(target, bluntVsOther.p, 1.f);
+               u_cast(knuckles_jab_spell.p, target, agr);
+               if ((rand() % 10) > 5) {
+                   target->SetGraphVariableFloat("StaggerMagnitude", 0.5f);
+                   target->NotifyAnimationGraph("StaggerStart");
+               }
+           }
+       }
+       auto jabs = u_same_activeEffects_count(target, knuckles_jab.p);   // how many jabs on target
+       if (jabs > 0) {
+          if (isPwAtk) {  
+              damage *= (1.f + (jabs * 0.15f));     //  pwatks after jabs
+          }
+       }
+
+      //________DEBUG________________________________________________________________________
+      float atkDmgMult = 1.f, pwAtkDmgMult = 1.f, target_overcap = 1.f;    
+      // прогоняем 1.f через ентри перков агрессора, что-бы узнать суммарные мульты. При этом проверяются кондишены, и мы получаем реальный мульт
+      RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, agr, my::myUnarmed.p, std::addressof(target_overcap));
+      RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, my::myUnarmed.p, target, std::addressof(atkDmgMult));
+      if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, my::myUnarmed.p, target, std::addressof(pwAtkDmgMult));
+
+       std::string left  = isLeft ? "LEFT" : "RIGHT";
+       std::string pwatk = isPwAtk ? "POWER" : "LIGHT";
+       LOG("FIST HIT: {}, {}, DAMAGE - {}, perks_AtkDamageMult - {}, perks_PWAtkDamageMult - {}, target_modIncomingDamage - {}",
+              left, pwatk, damage, atkDmgMult, pwAtkDmgMult, target_overcap);
+   }
+
+   void regive_mutagen (RE::SpellItem *spell, RE::Actor* pl, int count)
+   {
+       sameMutagensGlob.p->value = count;  // change for perk. 1 won't change magn, 2 will do 0.75, 3 will do 0.7
+       pl->RemoveSpell(spell);
+       pl->AddSpell(spell);
+   }
+
+   void add_mutagen (RE::SpellItem *spell, RE::Actor* pl, int count)
+   {
+       sameMutagensGlob.p->value = count;
+       pl->AddSpell(spell);
+   }
+
+   void remove_other (std::vector<RE::SpellItem*>& vec, RE::Actor *pl) // mutagens
+   {
+      for (auto& mut : vec) {
+          if (pl->HasSpell(mut)) pl->RemoveSpell(mut);
+      }
+   }
+
+   void handle_mutagen (RE::Actor *pl, RE::AlchemyItem* potion)
+   {
+      int red_count = 0, green_count = 0, blue_count = 0;
+      
+      if      (potion->HasKeyword(m_small_kw.p)) remove_other (smalls, pl);
+      else if (potion->HasKeyword(m_med_kw.p))   remove_other (meds, pl);      // remove same size mutagens
+      else if (potion->HasKeyword(m_big_kw.p))   remove_other (bigs, pl);
+         
+      if      (potion->HasKeyword(m_red_kw.p))    red_count++;
+      else if (potion->HasKeyword(m_green_kw.p))  green_count++;               // check drinked mutagen color
+      else if (potion->HasKeyword(m_blue_kw.p))   blue_count++;
+      
+      //re-give already active mutagens
+      if (pl->HasSpell(m_red_small.p))   regive_mutagen (m_red_small.p, pl, ++red_count);
+      if (pl->HasSpell(m_red_mid.p))     regive_mutagen (m_red_mid.p, pl, ++red_count);
+      if (pl->HasSpell(m_red_big.p))     regive_mutagen (m_red_big.p, pl, ++red_count); // prefix ++, cause we want increase before func calls
+      
+      if (pl->HasSpell(m_green_small.p)) regive_mutagen (m_green_small.p, pl, ++green_count);
+      if (pl->HasSpell(m_green_mid.p))   regive_mutagen (m_green_mid.p, pl, ++green_count);
+      if (pl->HasSpell(m_green_big.p))   regive_mutagen (m_green_big.p, pl, ++green_count);
+      
+      if (pl->HasSpell(m_blue_small.p))  regive_mutagen(m_blue_small.p, pl, ++blue_count);
+      if (pl->HasSpell(m_blue_mid.p))    regive_mutagen (m_blue_mid.p, pl, ++blue_count);
+      if (pl->HasSpell(m_blue_big.p))    regive_mutagen (m_blue_big.p, pl, ++blue_count);
+      
+      if (potion->HasKeyword(m_red_kw.p)) {
+          if      (potion->HasKeyword(m_small_kw.p)) add_mutagen (m_red_small.p, pl, red_count);  // add new mutagen
+          else if (potion->HasKeyword(m_med_kw.p))   add_mutagen (m_red_mid.p,   pl, red_count);
+          else if (potion->HasKeyword(m_big_kw.p))   add_mutagen (m_red_big.p,   pl, red_count);
+      }
+      else if (potion->HasKeyword(m_green_kw.p)) {
+          if      (potion->HasKeyword(m_small_kw.p)) add_mutagen (m_green_small.p, pl, green_count);
+          else if (potion->HasKeyword(m_med_kw.p))   add_mutagen (m_green_mid.p,   pl, green_count);
+          else if (potion->HasKeyword(m_big_kw.p))   add_mutagen (m_green_big.p,   pl, green_count);
+      }
+      else if (potion->HasKeyword(m_blue_kw.p)) {
+          if      (potion->HasKeyword(m_small_kw.p)) add_mutagen (m_blue_small.p, pl, blue_count);
+          else if (potion->HasKeyword(m_med_kw.p))   add_mutagen (m_blue_mid.p,   pl, blue_count);
+          else if (potion->HasKeyword(m_big_kw.p))   add_mutagen (m_blue_big.p,   pl, blue_count);
+      }
+   }
+
+   void oil_proc (RE::Actor* pl, RE::Actor* target, RE::HitData *hit_data, float& damage)
    {
       LOG("called oil_proc");
-	  
+      
       auto poisonData = u_get_pc_poison(false);  // check right hand
       if (!poisonData) {
            poisonData = u_get_pc_poison(true);   // check left hand
-           if (!poisonData) return false;
+           if (!poisonData) return;
       }
       auto oil = poisonData->poison;                             // alchItem oil
-      if (!oil || oil->effects.empty()) return false;
+      if (!oil || oil->effects.empty()) return;
       auto oil_id = oil->effects[0]->baseEffect->formID;         // id of effectSetting
-	  
+      
       float charges = float(poisonData->count);
-      float max_charge = pl->HasPerk(alch_poison_50_perk) ? 180.f : 120.f;      // max charge depends on perk and oil grade
+      float max_charge = 140.f;      // w/o oil grade
 
-	  float ef = 1.f;
+      float ef = 1.f;
 
-	  if (oil->HasKeyword(oil_improvedKW)) {
-          max_charge += 30.f;                                     //  improved oils
-          ef += 0.2f;
+      if (oil->HasKeyword(oil_improvedKW)) {       //  improved oils
+          max_charge += 40.f;                                     
+          ef *= 1.2f;    // improved/pure, cause those kw are only in potions, onHit spells has no improved kw
       }
-      else if (oil->HasKeyword(oil_pureKW)) {
-          max_charge += 60.f;                                     //  pure oils
-          ef += 0.4f;
+      else if (oil->HasKeyword(oil_pureKW)) {      //  pure oils
+          max_charge += 80.f;                                     
+          ef *= 1.4f;
       }
 
       float part = charges/max_charge;       // for ex 90/120 charges remained, part = 0.75
@@ -55,80 +198,98 @@ namespace gameplay
       if (pl->HasPerk(alch_100_perk))       debuff *= 0.7f;   //
       ef -= debuff;      // 1 - 0.2 = 0.8  (charge-dependent debuff)
 
-	  //LOG("oil_proc: charges remain - {}, part - {}, debuff - {}, charge-dependent efficiency - {}", charges, part, debuff, ef);
+      //LOG("oil_proc: charges remain - {}, part - {}, debuff - {}, charge-dependent efficiency - {}", charges, part, debuff, ef);
 
       if (oil_id == oil_silver->formID)    // silver oil
       {
           if (target->HasKeyword(actorTypeUndead) || target->HasKeyword(vampire.p))
           {
- 			  float firstMagn  = silverDust1.p->effects[0]->effectItem.magnitude * ef * oil_perks_mult(pl, oil);  // 5.1   (~17 with all perks and ef 1.4)
-              float secondMagn = silverDust2.p->effects[0]->effectItem.magnitude * ef * oil_perks_mult(pl, oil);  // 3.12  (~10)
-			  // firstMagn = 17 for flat damage and non-silver buff, secondMagn = 10 for dmg percent and debuff penetr
+              float firstMagn = oil->effects[0]->GetMagnitude() * ef;   // 4.50  (~15 with all perks and ef 1.4)
+              float secondMagn = oil->effects[1]->GetMagnitude() * ef;  // 3.12  (~10)
+              float dotDmg = firstMagn + (damage * (secondMagn * 0.01f));  // 15 + 10% of dmg
+              // firstMagn = 17 for flat damage and non-silver buff, secondMagn = 10 for dmg percent and debuff penetr
               if (!hit_data->weapon->HasKeyword(weapMaterialSilver))
               {
-                  hit_data->totalDamage *= (1.f + firstMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
+                  damage *= (1.f + firstMagn*0.01f);      // non silver weapon will do x1.17 dmg to undead
               }
-              float dotDmg = firstMagn + (hit_data->totalDamage*(secondMagn*0.01f));  // 17 + 10% of dmg
-              //LOG("SILVER_OIL: hit_data->totalDamage - {}, final dotDmg - {}, charge_based_mult - {}, flat_magn_oil_perks_scaled - {}", hit_data->totalDamage, dotDmg, ef, realMagn);
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverDust1.p, false, target, 1.f, false, dotDmg, pl);
-			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(silverDust2.p, false, target, 1.f, false, secondMagn, pl);
+              cast_oil (silverDust1.p, target, pl, oil, ef, dotDmg);     // damage spell
+              cast_oil (silverDust2.p, target, pl, oil, ef);             // debuff spell
           }
       }
-      else if (oil_id == oil_disease->formID)   // disease oil
+      else if (oil_id == oil_disease->formID)   // black oil
       {
           auto diseaseRes = target->GetActorValue(RE::ActorValue::kResistDisease);    // ignores 50% of disease res, 100% res will make 50% effnss
           float effnss = (1.f - (diseaseRes / 200.f));
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_diseaseOnHit, false, target, effnss*ef, false, 0, pl);
+          ef *= effnss;
+          cast_oil (oil_diseaseOnHit, target, pl, oil, ef);
       }
       else if (oil_id == oil_ignite->formID)    // ignite oil
       {   
-          // decrease fire res
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit1, false, target, ef, false, 0, pl);                 
+          cast_oil (oil_igniteOnHit1, target, pl, oil, ef);  // decrease fire res               
           int fireRes = int(target->GetActorValue(RE::ActorValue::kResistFire));
-          if (fireRes < -30) fireRes = -30;
+          if (fireRes < -20) fireRes = -20;
           int random = rand() % (fireRes+50);
-          if (random < 15)   // ignite chance
-			  pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_igniteOnHit2, false, target, ef, false, 0, pl);
+          if (random < 20)
+              cast_oil (oil_igniteOnHit2, target, pl, oil, ef);  // ignite
       }
       else if (oil_id == oil_frost->formID)     // frost oil
       {    
+          cast_oil (oilFrost_onHit1.p, target, pl, oil, ef);  // frost dmg
           int frostRes = int(target->GetActorValue(RE::ActorValue::kResistFrost));
           if (frostRes < -10) frostRes = -10;
           int random = rand() % (frostRes+40);
-          if (random < 10 && !target->HasMagicEffect(oil_KWHolder))
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_frostOnHit, false, target, ef, false, 0, pl);
-          return true;   // convert dmg to frost in core.cpp
+          if (target->HasMagicEffect(oilFrostDmgDecrease.p)) damage *= 1.1f; // is frozen
+          else if (random < 10) {
+              cast_oil (oilFrost_onHit2.p, target, pl, oil, ef);  // freeze
+              cast_oil (oilFrost_onHit3.p, target, pl, oil, ef);  // atkspeed
+          }
       }
       else if (oil_id == oil_poison->formID)     // poison oil
-      {    
+      {
           float poisonRes = target->GetActorValue(RE::ActorValue::kPoisonResist);
-          if (poisonRes < -25.f) poisonRes = -25.f;
+          if (poisonRes < 0)    poisonRes = 0;
+          if (poisonRes > 99.f) poisonRes = 99.f;
           float effnss = (1.f - (poisonRes / 100.f));
-          int random = rand() % 10;
-          if (random < 4) {
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_poisonOnHit, false, target, effnss*ef, false, 0, pl);
+          ef *= effnss;
+          int random = rand() % (10 + int(poisonRes/10.f));
+          if (random < 7) {
+              if (u_same_activeEffects_count(target, oilPoison_stackCounter.p) > 4) {  // if x5 stacks cast overdose
+                  float hp = target->GetActorValue(RE::ActorValue::kHealth);
+                  float magnOverdose = oil->effects[1]->GetMagnitude() * ef;
+                  cast_oil (oilPoison_overdose.p, target, pl, oil, ef, hp*(magnOverdose/100));  // overdose
+              }
+              cast_oil (oilPoison_onHit1.p, target, pl, oil, ef);   // poison dmg
+              cast_oil (oilPoison_onHit2.p, target, pl, oil, ef);   // debuffs
           }
       }
       else if (oil_id == oil_garlic->formID)    // garlic oil
       {    
           if (!target->HasMagicEffect(oilGarlicMarker) && (target->HasSpell(vampirism) || target->HasKeyword(vampire.p))) {
-              pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_garlicOnHit, false, target, ef, false, 0, pl);
+              cast_oil (oilGarlic_onHit1.p, target, pl, oil, ef);
+              cast_oil (oilGarlic_onHit2.p, target, pl, oil, ef);
           }
       }
-	  else if (oil_id == oil_corrose->formID)    // corrose oil
+      else if (oil_id == oil_corrose->formID)    // corrose oil
       {    
-          float realMagn = 0.03f * ef * oil_perks_mult (pl, oil);   // default magn 0.03, oil scales will make this ~0.10  (10% of armor n damage)
-          float armorDmg = target->GetActorValue(RE::ActorValue::kDamageResist) * realMagn;     
-          pl->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(oil_corroseOnHit, false, target, 1.f, false, armorDmg, pl);
-          hit_data->totalDamage *= (1.f - realMagn);  // reduce dmg, for ex *= 0.9
+          float magn = oil->effects[0]->GetMagnitude() * 0.01f * ef;  // default 0.03, scales will make ~0.10 (10% of armor n damage)
+          float armorDmg = target->GetActorValue(RE::ActorValue::kDamageResist) * magn;
+          cast_oil (oil_corroseOnHit, target, pl, oil, ef, armorDmg);
+          damage *= (1.f - magn);  // reduce your dmg, for ex *= 0.9
       }
-      
-      return false;
    }
 
-   void windRunnerCheck(RE::Actor* pl)
+   void vamp_drain_onHit (RE::Actor* agr, RE::Actor* target)
    {
-      if (pl->HasPerk(windRunnerPerk))
+       float amount = agr->GetLevel() * 0.7f;
+       agr->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, amount);
+       agr->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, amount);
+       target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -amount);
+       target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -amount);
+   }
+
+   void windRunnerCheck (RE::Actor* pl)
+   {
+      if (pl->HasPerk(windRunnerPerk.p))
       {
           float maxHP = u_get_actor_value_max(pl, RE::ActorValue::kHealth);
           float maxST = u_get_actor_value_max(pl, RE::ActorValue::kStamina);
@@ -148,48 +309,63 @@ namespace gameplay
       }
    }
 
-   void bossFightHandle (RE::Actor *boss, int fightID, uint16_t& counter)        //  works onUpdate
+   void handle_bossAppearance (RE::Actor *boss)
+   {
+        currBoss = boss;
+        auto fightID = bossFightID.p->value;
+        if (boss->HasSpell(my::olve_training.p) && fightID != Olve2stage && fightID != OlvePre2stage)
+            bossFightID.p->value = Olve1stage;
+        else if (boss->HasSpell(my::seph_training.p) || boss->HasSpell(my::seph_training2.p))
+            bossFightID.p->value = Sephiroth;
+   }
+
+   void bossFightHandle (int fight, uint16_t& counter)        //  works onUpdate
    {
       LOG("called gameplay::bossFightHandle()");
-      if (!boss || !boss->IsInCombat()) return;
+      if (!currBoss || !currBoss->IsInCombat()) return;
 
-	  counter++;
-
-      if (counter > 50) {
+      counter++;
+      if (counter > 300) {
           counter = 0;
           return;
       }
+      //RE::DebugNotification(std::to_string(counter).c_str());
 
-      currBoss = boss;    // field
-
-      if (fightID == 1)  // olve   // make enum
+      if (fight == Olve1stage || fight == Olve2stage)
       {
-          if (olveState == 0 && counter >= 7)  // pre-shield / 14 sec
+          if ((fight == Olve2stage) && (counter > 120))  // return to 1 stage after 4min
           {
-              //u_playSound(mys::player, olvePreShieldVoice, 2.f);
+               counter = 0;
+               bossFightID.p->value = Olve1stage;
+          }
+          else if (olveState == 0 && (counter %7==0))  // pre-shield / every 14 sec
+          {
               u_cast_on_self(olvePreShield, currBoss);
               olveState = 1;
-              counter = 0;
           }
-		  else if (olveState == 1 && counter >= 7)   // expl / 14 sec
-		  {
+          else if (olveState == 1 && (counter %7==0))   // expl / 14 sec
+          {
               u_cast_on_self(olveCast, currBoss);
               olveState = 0;
-              counter = 0; 
-		  }
+          }
       }
-	  else if (fightID == 2)  // sephiroth
-	  {
-		  if (counter >= 14)  // 28 sec
-		  {
+      else if (fight == OlvePre2stage)   // olve just entering 2 stage
+      {
+          counter = 0;                 // start check stage duration
+          bossFightID.p->value = Olve2stage;
+      }
+
+      else if (fight == Sephiroth)
+      {
+          if (counter >= 14)  // 28 sec
+          {
               u_cast_on_self(sephCast, currBoss);
               counter = 0;
-		  } 
-	  }
+          } 
+      }
    }
 
-
-   void gmpl_on_micro_update()   // every 1 sec
+   void gmpl_on_micro_update()   // not used now
    {
       if (olveState == 1) {                              // olve shield
           //u_cast_on_self(olveShield, currBoss);
@@ -199,48 +375,53 @@ namespace gameplay
 
    void initGameplayData()
    {
-
       auto handler = RE::TESDataHandler::GetSingleton();
 
-      oil_garlicOnHit = handler->LookupForm<RE::SpellItem>(0x171D9A, "RfaD SSE - Awaken.esp");
-      oil_poisonOnHit = handler->LookupForm<RE::SpellItem>(0x12AE82, "RfaD SSE - Awaken.esp");
       oil_diseaseOnHit = handler->LookupForm<RE::SpellItem>(0xE9074, "RfaD SSE - Awaken.esp");
-      oil_frostOnHit = handler->LookupForm<RE::SpellItem>(0x12FF98, "RfaD SSE - Awaken.esp");
       oil_igniteOnHit1 = handler->LookupForm<RE::SpellItem>(0x12AE7E, "RfaD SSE - Awaken.esp");
       oil_igniteOnHit2 = handler->LookupForm<RE::SpellItem>(0x12AE80, "RfaD SSE - Awaken.esp");
       oil_corroseOnHit = handler->LookupForm<RE::SpellItem>(0x2233B9, "RfaD SSE - Awaken.esp");
 
-	  oil_silver  = handler->LookupForm<RE::EffectSetting>(0xCFAEC,  "RfaD SSE - Awaken.esp");
+      oil_silver  = handler->LookupForm<RE::EffectSetting>(0xCFAEC,  "RfaD SSE - Awaken.esp");
       oil_disease = handler->LookupForm<RE::EffectSetting>(0xE9071,  "RfaD SSE - Awaken.esp");
       oil_frost   = handler->LookupForm<RE::EffectSetting>(0x12FF97, "RfaD SSE - Awaken.esp");
-	  oil_garlic  = handler->LookupForm<RE::EffectSetting>(0x16CC81, "RfaD SSE - Awaken.esp");
-	  oil_ignite  = handler->LookupForm<RE::EffectSetting>(0x12AE7D, "RfaD SSE - Awaken.esp");
-	  oil_poison  = handler->LookupForm<RE::EffectSetting>(0x16CC7E, "RfaD SSE - Awaken.esp");
+      oil_garlic  = handler->LookupForm<RE::EffectSetting>(0x16CC81, "RfaD SSE - Awaken.esp");
+      oil_ignite  = handler->LookupForm<RE::EffectSetting>(0x12AE7D, "RfaD SSE - Awaken.esp");
+      oil_poison  = handler->LookupForm<RE::EffectSetting>(0x16CC7E, "RfaD SSE - Awaken.esp");
       oil_corrose = handler->LookupForm<RE::EffectSetting>(0x21913B, "RfaD SSE - Awaken.esp");
 
-	  oilGarlicMarker = handler->LookupForm<RE::EffectSetting>(0x2284D0, "RfaD SSE - Awaken.esp");
+      oilGarlicMarker = handler->LookupForm<RE::EffectSetting>(0x2284D0, "RfaD SSE - Awaken.esp");
       oil_KWHolder    = handler->LookupForm<RE::EffectSetting>(0x1FFBCA, "RfaD SSE - Awaken.esp");
-	  oil_improvedKW  = handler->LookupForm<RE::BGSKeyword>(0x21912E, "RfaD SSE - Awaken.esp");
+      oil_improvedKW  = handler->LookupForm<RE::BGSKeyword>(0x21912E, "RfaD SSE - Awaken.esp");
       oil_pureKW      = handler->LookupForm<RE::BGSKeyword>(0x21E298, "RfaD SSE - Awaken.esp");
   
-	  olveShield = handler->LookupForm<RE::SpellItem>(0xD01250, "RfaD SSE - Awaken.esp");
+      olveShield = handler->LookupForm<RE::SpellItem>(0xD01250, "RfaD SSE - Awaken.esp");
 
-	  olvePreShieldVoice = handler->LookupForm<RE::BGSSoundDescriptorForm>(0xAFE0DC, "RfaD SSE - Awaken.esp");
+      olvePreShieldVoice = handler->LookupForm<RE::BGSSoundDescriptorForm>(0xAFE0DC, "RfaD SSE - Awaken.esp");
       
-	  vampirism = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);
-      windRunnerPerk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F22);
+      vampirism = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);
       alch_poison_25_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F2F);
       alch_poison_50_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x105F2C);
       alch_poison_75_perk = RE::TESForm::LookupByID<RE::BGSPerk>(0x58217);
       alch_100_perk       = RE::TESForm::LookupByID<RE::BGSPerk>(0x58218); 
-	  actorTypeUndead     = RE::TESForm::LookupByID<RE::BGSKeyword>(0x13796);
+      actorTypeUndead     = RE::TESForm::LookupByID<RE::BGSKeyword>(0x13796);
       weapMaterialSilver  = RE::TESForm::LookupByID<RE::BGSKeyword>(0x10AA1A);
 
-	  olvePreShield = handler->LookupForm<RE::SpellItem>(0x1F0890, "RfaD SSE - Awaken.esp");
-	  olveCast = handler->LookupForm<RE::SpellItem>(0x1C7FFC, "RfaD SSE - Awaken.esp");
+      olvePreShield = handler->LookupForm<RE::SpellItem>(0x1F0890, "RfaD SSE - Awaken.esp");
+      olveCast = handler->LookupForm<RE::SpellItem>(0x1C7FFC, "RfaD SSE - Awaken.esp");
       sephCast = handler->LookupForm<RE::SpellItem>(0x1EB778, "RfaD SSE - Awaken.esp");
-	  currBoss = nullptr;
-	  olveState = 0;
+      currBoss = nullptr;
+      olveState = 0;
+
+      smalls.emplace_back (m_red_small.p);
+      smalls.emplace_back (m_green_small.p);
+      smalls.emplace_back (m_blue_small.p);
+      meds.emplace_back   (m_red_mid.p);
+      meds.emplace_back   (m_green_mid.p);
+      meds.emplace_back   (m_blue_mid.p);
+      bigs.emplace_back   (m_red_big.p);
+      bigs.emplace_back   (m_green_big.p);
+      bigs.emplace_back   (m_blue_big.p);
    }
 }
 
@@ -301,8 +482,8 @@ namespace qst
         isAnachoretDead = handler->LookupForm<RE::TESGlobal>(0xA2128, "RfaD SSE - Awaken.esp");
         isNamiraBossDead = handler->LookupForm<RE::TESGlobal>(0x2B99A6, "ChihSkillTree.esp");
 
-		contractsDone = handler->LookupForm<RE::TESGlobal>(0x1B3BA9, "RfaD SSE - Awaken.esp");
-		castleMagesKilled = handler->LookupForm<RE::TESGlobal>(0x19A64C, "RfaD SSE - Awaken.esp");
+        contractsDone = handler->LookupForm<RE::TESGlobal>(0x1B3BA9, "RfaD SSE - Awaken.esp");
+        castleMagesKilled = handler->LookupForm<RE::TESGlobal>(0x19A64C, "RfaD SSE - Awaken.esp");
         ambassadorsKilled = handler->LookupForm<RE::TESGlobal>(0x288948, "RfaD SSE - Awaken.esp");
         stonesBuffStopDay = handler->LookupForm<RE::TESGlobal>(0x6D0994, "devFixes.esp");
         aedraToken = handler->LookupForm<RE::BGSPerk>(0xE460B, "Requiem for a Dream - DivineBlessings.esp");
@@ -347,9 +528,6 @@ namespace qst
         }
         else if (qst::startMerc->currentStage == 40) {
                  if (victim->HasSpell(qst::mercTraining) || victim->HasSpell(qst::bldHorkerTraining)) qst::currGoalVal->value += 1;  // mercenaries
-        }
-        else if (qst::startPal->currentStage == 60) {
-                 if (victim->IsInFaction(RE::TESForm::LookupByID<RE::TESFaction>(0x34B74))) qst::currGoalVal->value += 1;  // necromant faction
         }
         else if (qst::startNecr->currentStage == 50) {
                  if (victim->IsInFaction(RE::TESForm::LookupByID<RE::TESFaction>(0x34B74))) qst::currGoalVal->value += 1;  // necromant faction
@@ -433,7 +611,7 @@ int priestsHelped ()
 {
     int x = 0;
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x23B6C)->currentStage > 80) x++;  // T01
-    if (RE::TESForm::LookupByID<RE::TESQuest>(0x211D5)->currentStage > 95) x++;     // T02
+    if (RE::TESForm::LookupByID<RE::TESQuest>(0x211D5)->currentStage > 95) x++;  // T02
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x1C48E)->currentStage > 30) x++;  // T03
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x53309)->currentStage > 25) x++;  // FreeformRiften05
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x43E1A)->currentStage > 10) x++;  // FreeformRiften13
@@ -549,6 +727,12 @@ int essence_found ()
     if (u_get_item_count(mys::player, 0x1D7CBA) > 0) x++;
     qst::currGoalVal->value = x;
     return x;
+}
+
+int altars_touched()
+{
+    qst::currGoalVal->value = qst::altarsTouched.p->value;
+    return qst::currGoalVal->value;
 }
 
 int vampire_dust_have() {
@@ -694,15 +878,15 @@ namespace qst
     {
         auto this_ = qst::startPal;
         auto stage = qst::startPal->currentStage;
-        if        (stage == 1  && player->HasPerk(qst::aedraToken)) setStage(this_, 10);   // [1] take bless
+        if      (stage == 1  && player->HasPerk(qst::aedraToken))   setStage(this_, 10);   // [1] take bless
         else if (stage == 10 && citizenHelped() > 9)                setStage(this_, 20);   // [2] help citizen x10
         else if (stage == 20 && qst::DBDestroy->currentStage > 30)  setStage(this_, 30);   // [3] destroy DB
-        else if (stage == 30 && priestsHelped() > 4)                setStage(this_, 40);   // [4] help priests x5
+        else if (stage == 30 && priestsHelped() > 2)                setStage(this_, 40);   // [4] help priests x3
         else if (stage == 40 && qst::DA10->currentStage > 65)       setStage(this_, 50);   // [5] help tyranus
         else if (stage == 50 && has_pal_ring())                     setStage(this_, 60);   // [6] ring of paladin
-        else if (stage == 60 && qst::currGoalVal->value > 14)       setStage(this_, 70);   // [7] slay necrs x15
-        else if (stage == 70 && qst::isAnachoretDead->value > 0)    setStage(this_, 80);   // [8] anachoret
-        else if (stage == 80 && essence_found() > 2)                setStage(this_, 90);   // [9] find 3 essence
+        else if (stage == 60 && altars_touched() > 8)               setStage(this_, 70);   // [7] altars touched x9
+        else if (stage == 70 && essence_found() > 2)                setStage(this_, 80);   // [8] find 3 essence
+        else if (stage == 80 && qst::isAnachoretDead->value > 0)    setStage(this_, 90);   // [9] anachoret
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startVigil->currentStage > 0)        //  [VIGILANT]
@@ -726,26 +910,27 @@ namespace qst
         auto this_ = qst::startDB;
         auto stage = qst::startDB->currentStage;
         if      (stage == 1  && dbcontractsDone())                setStage(this_, 10);  // [1] contracts
-        else if (stage == 10 && qMisc("Poisons Mixed") > 29)      setStage(this_, 20);  // [2] poisons x30
+        else if (stage == 10 && qMisc("Poisons Mixed") > 4)       setStage(this_, 20);  // [2] poisons x5
         else if (stage == 20 && qMisc("Murders") > 9)             setStage(this_, 30);  // [3] peaceful x10
         else if (stage == 30 && qMisc("People Killed") > 59)      setStage(this_, 40);  // [4] enemies x60
         else if (stage == 40 && qst::currGoalVal->value > 29)     setStage(this_, 50);  // [5] guards x30
-        else if (stage == 50 && castle_mages_killed() > 3)        setStage(this_, 60);  // [6] castle mage x4
+        else if (stage == 50 && castle_mages_killed() > 2)        setStage(this_, 60);  // [6] castle mage x3
         else if (stage == 60 && ambassadors_killed()  > 2)        setStage(this_, 70);  // [7] ambassador x3
         else if (stage == 70 && qst::DLC2RR02->currentStage >90)  setStage(this_, 80);  // [8] morag tong
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startVamp->currentStage > 0)        //  [VAMPIRE]
     {
-            auto this_ = qst::startVamp;
-            auto stage = qst::startVamp->currentStage;
+        auto this_ = qst::startVamp;
+        auto stage = qst::startVamp->currentStage;
       //if      (stage == 1  && phials papyrus)                   setStage(this_, 10);   // [1] phials
         if      (stage == 10 && qst::currGoalVal->value > 9)      setStage(this_, 20);   // [2] feed x10
         else if (stage == 20 && qst::isMarkDead->value > 0)       setStage(this_, 30);   // [3] slay Mark
         else if (stage == 30 && qst::isWilhelmDead->value > 0)    setStage(this_, 40);   // [4] slay Wilhelm
         else if (stage == 40 && qst::currGoalVal->value > 19)     setStage(this_, 50);   // [5] vampires x20
-        else if (stage == 50 && qst::currGoalVal->value > 9)      setStage(this_, 60);   // [6] dawnguards x10
-        else if (stage == 60 && vampArtifacts())                  setStage(this_, 70);   // [7] artifacts x4
+        else if (stage == 50 && qst::currGoalVal->value > 9)      setStage(this_, 55);   // [6] dawnguards x10
+      //else if (stage == 55 && speak_to_vesper_papyrus)          setStage(this_, 60);   // 
+      //else if (stage == 60 && bring_artifacts_papyrus)          setStage(this_, 70);   // [7] bring artifacts x4
         else if (stage == 70 && vigharMovarthDead())              setStage(this_, 80);   // [8] vighar & movart
         else if (stage == 80 && qst::DLC1VQ08->currentStage > 40) setStage(this_, 90);   // [9] harkon dead
         u_updQuestTextGlob(this_, qst::currGoalVal);
@@ -760,9 +945,9 @@ namespace qst
         else if (stage == 30 && qMisc("Spells Learned") > 29)     setStage(this_, 40);  // [4] spells x30
         else if (stage == 40 && qst::DLC2TT2->currentStage >400)  setStage(this_, 50);  // [5] neloth - kill ildari
         else if (stage == 50 && staffsFound() > 3)                setStage(this_, 60);  // [6] staffs x4
-        else if (stage == 60 && solsteimMasksFound() > 2)         setStage(this_, 70);  // [7] solsteim masks
-        else if (stage == 70 && qst::MG08->currentStage > 50)     setStage(this_, 80);  // [8] arch-mage
-        else if (stage == 80 && ritualQuests() > 4)               setStage(this_, 90);  // [9] ritual quest x5
+        else if (stage == 60 && qst::MG08->currentStage > 50)     setStage(this_, 70);  // [7] arch-mage        
+        else if (stage == 70 && ritualQuests() > 4)               setStage(this_, 80);  // [8] ritual quest x5
+        else if (stage == 80 && solsteimMasksFound() > 2)         setStage(this_, 90);  // [9] solsteim masks
         u_updQuestTextGlob(this_, qst::currGoalVal);
     }
     else if (qst::startCult->currentStage > 0)        //  [CULTIST]
@@ -805,6 +990,7 @@ namespace qst
       //else if (stage == 70 && note_in_valley_papyrus)              setStage(this_, 80);  // note in valley
         else if (stage == 80 && qst::DLC1VQ07->currentStage > 110)   setStage(this_, 90);  // kill virtur
         u_updQuestTextGlob(this_, qst::currGoalVal);
+
     }
 
     check_horseCert();
