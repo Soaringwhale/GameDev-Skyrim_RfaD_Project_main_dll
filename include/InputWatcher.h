@@ -11,14 +11,13 @@ class  InputWatcher  :  public  RE::BSTEventSink<InputEvents>        // наследуе
     virtual RE::BSEventNotifyControl ProcessEvent (const InputEvents* evns, RE::BSTEventSource<InputEvents>* dispatcher)  override;
     TES_HEAP_REDEFINE_NEW();
 
-
     static InputWatcher* GetSingleton()        // my.
     {
         static InputWatcher singleton;
         return std::addressof(singleton);
     }
 
-    void enable()                            // my.  this method we call in main to register our class for work.
+    void register_()                            // my.  register to catch buttons
     {
         if (auto input = RE::BSInputDeviceManager::GetSingleton()) {
             input->AddEventSink(this);

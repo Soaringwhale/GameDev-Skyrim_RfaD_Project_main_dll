@@ -19,6 +19,8 @@ set(headers
 		${CMAKE_CURRENT_SOURCE_DIR}/include/InputWatcher.h
 		${CMAKE_CURRENT_SOURCE_DIR}/include/ItemCardFixer.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/SimpleIni.h
+		${CMAKE_CURRENT_SOURCE_DIR}/include/ui.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/utils.h
 ) 
 
@@ -29,6 +31,7 @@ set(sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/src/InputWatcher.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/src/ItemCardFixer.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/src/ui.cpp	
         ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.cpp	
 )
 

@@ -4,44 +4,61 @@
 #include "core.h"
 #include "ItemCardFixer.h"
 #include "InputWatcher.h"
+#include "ui.h"
 #include "logger.h"
 //#include "PCH.h"
 
 
+#ifdef SKYRIM_SUPPORT_AE
+    #define RELOCATION_OFFSET(SE, AE) (AE)
+#else
+    #define RELOCATION_OFFSET(SE, AE) (SE)
+#endif
+
 static float upd_timer = 2.0f;   // 2 sec
 
-struct OnPlayerUpdate_Hook final
+class OnPlayerUpdate_Hook
 {
 public:
-    static void install_hook()                                                     
-    {
-        REL::Relocation<uintptr_t> update_pl_address_{RELOCATION_ID(261916, 0)};
-        old_func = update_pl_address_.write_vfunc(0xAD, update_pc);                     //  vfunc
+    static void install_hook() {
+        old_func = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[0]).write_vfunc(0xAD, new_func);
     }
  private:
-    static void update_pc(RE::PlayerCharacter *player_, float delta)
+    static void new_func (RE::PlayerCharacter *player_, float delta)   // первый аргумент RE::Actor *this (по-хорошему)
     {
-      
         mys::time_delta = delta;        // for other functions
 
-        //mys::micro_timer -= delta;
         upd_timer -= delta;
-
-        //if (mys::micro_timer <= 0.f) {
-        //    mys::micro_timer = 1.f;
-        //    on_micro_update();           // every 1 sec
-        //}
 
         if (upd_timer <= 0.f) {
             upd_timer = 2.0f;            // every 2 sec
             on_my_update();
         }
-        return old_func(player_, delta);
+        return old_func (player_, delta);
     }
+    static inline REL::Relocation<decltype (new_func)> old_func;
+};
 
-    static inline  REL::Relocation<decltype(update_pc)>  old_func;
-}; 
 
+class OnCharacterUpdate_Hook
+{
+public:
+    static void install_hook() {
+        old_func = REL::Relocation<uintptr_t>(RE::VTABLE_Character[0]).write_vfunc(0xAD, new_func);
+    }
+ private:
+    static void new_func (RE::Character *character, float delta)
+    {
+		if (character) { // && a_->HasSpell(my::seph_training.p)) {
+            if (character->currentProcess && character->currentProcess->middleHigh) {
+				auto unk2A0 = character->currentProcess->middleHigh->unk2A0;
+                SKSE::log::info("Actor - {}, midHigh->unk2A0 = {}", character->GetName(), unk2A0);
+            }
+        }
+        return old_func (character, delta);
+    }
+    static inline REL::Relocation<decltype (new_func)> old_func;
+};
 
 class HiddenSpeedMult_updater_Hook        // returns actor hidden speed mult, default 1.0
 {                              
@@ -51,9 +68,9 @@ public:
         old_func = SKSE::GetTrampoline().write_call<5>(REL::RelocationID(37013, 37943).address() + REL::Relocate(0x1A, 0x51), new_func);
     }
 private:
-    static float new_func(RE::Actor* a_actor)
+    static float new_func (RE::Actor* a_actor)
     {
-        float hiddenMult = old_func(a_actor);
+        float hiddenMult = old_func(a_actor);  // default func is called
 
         if (a_actor->IsPlayerRef() && mys::dodge_timer > 0)
         {
@@ -62,62 +79,111 @@ private:
         }
         return hiddenMult - mys::ms_compensator;    
     }
-    
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
+// НАДО ХУКНУТЬ CALC_ATTACK_STAMINA_DRAIN , но не function call хуками т.к. их там 4 штуки (4 места вызова), а function start хуком из 8 ролика. Сделать траты стамины через это.
 
 
-class OnEquip_Hook
-{
- public:
-    static void install_hook ()  {
-     
-        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37938).address() + 0xE5, new_func);
-        // old_func_defaultSlot = SKSE::GetTrampoline().write_call<5>(REL::ID(37938).address() + 0x7F, new_func);    // 
+// ---------------------------------------  AI HOOKS -----------------------------------------------
+
+class EvadeProjectileChanceNPC_Hook     // chance that npc move aside when projectile flies (AI). it doesn't consider "reaction time" parameter, so npc might not have time to dodge at long range
+{                              
+public:
+    static void install_hook() {
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(46589).address() + 0xef, new_func);
     }
- private:
-    static void new_func(RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object, void* extra_data_list)
+private:
+    static float new_func (RE::Actor* a_actor)
     {
-        if (!equip_manager || !actor || !bound_object || !extra_data_list) {
-            return old_func (equip_manager, actor, bound_object, extra_data_list);
-        }
-        on_equip(actor, bound_object);
-        return old_func(equip_manager, actor, bound_object, extra_data_list);
+        old_func(a_actor);  // even if we don't need default func calculations, it's always better to call it for mod compatibility. Another mod can hook this after our mod
+        //return 0.25f;    // 1 will make 100% chance. Later maybe add a AI-simulator function, that high-level agile NPC evade more often
     }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
 
+class AttacksChanceNPC_Hook     // works when npc calcs chances for different attack types (attack choose), return 0 will make them not attack at all (will stand in block)
+{                              
+public:
+    static void install_hook() {
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(48139).address() + 0x2ae, new_func);  
+    }
+private:
+    static float new_func (RE::Actor* a_actor)
+    {
+        old_func(a_actor);
+        // return 0.f;    // unable to attack, for example w/o stamina
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+
+};
+//-------------------------------------------------------------------------------------------------
+
+        // old_func_defaultSlot = SKSE::GetTrampoline().write_call<5>(REL::ID(37938).address() + 0x7F, new_func);    // 
+
+
+class OnEquip_Hook 
+{
+  public:
+    static void install_hook ()  {     
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::RelocationID(37938, 38894).address() + RELOCATION_OFFSET(0xE5, 0x170), new_func);
+    }
+  private:
+    static void new_func (RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object, RE::ObjectEquipParams* params)
+    {
+        if (!equip_manager || !actor || !bound_object || !params) {
+            return old_func (equip_manager, actor, bound_object, params);
+        }
+        on_equip (actor, bound_object, params);
+        return old_func (equip_manager, actor, bound_object, params);
+    }
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
 
 class OnUnEquip_Hook
 {
+  public:
+    static void install_hook() {
+         old_func = SKSE::GetTrampoline().write_call<5>(REL::RelocationID(37945, 38901).address() + RELOCATION_OFFSET(0x138, 0x1B9), new_func);
+    }
+  private:
+    static void new_func (RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object, RE::ObjectEquipParams* params)
+    {
+        if (!equip_manager || !actor || !bound_object || !params) {
+            return old_func (equip_manager, actor, bound_object, params);
+        }
+        on_unequip(actor, bound_object, params);
+        return old_func (equip_manager, actor, bound_object, params);
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+
+class OnDispel_Hook
+{
  public:
     static void install_hook() {
-        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37945).address() + 0x138, new_func);
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33777).address() + 0x32, new_func);
     }
  private:
-    static void new_func(RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object, void* extra_data_list)
+    static void new_func (RE::ActiveEffect* eff, char force)
     {
-        if (!equip_manager || !actor || !bound_object || !extra_data_list) {
-            return old_func(equip_manager, actor, bound_object, extra_data_list);
+        if (eff && eff->effect && eff->effect->baseEffect) {
+            if (eff->effect->baseEffect->HasKeyword(my::no_dispel.p))  return;
+            if (eff->spell && eff->spell->HasKeyword(my::no_dispel.p)) return;
         }
-        on_unequip(actor, bound_object);
-        return old_func(equip_manager, actor, bound_object, extra_data_list);
+        return old_func (eff, force);
     }
-
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
 
 
-class On_PlayerAnimEvent_Hook {
+class On_AnimEvent_Hook {
 public:
     static void install_hook() {
-
-        REL::Relocation<uintptr_t>  hook {RELOCATION_ID(261918, 0)};
-
-        old_func = hook.write_vfunc(0x1, new_func);
+		old_func_pc  = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[2]).write_vfunc(0x1, new_func);
+        //old_func_npc = REL::Relocation<uintptr_t>(RE::VTABLE_Character[2]).write_vfunc(0x1, new_func);
     }
 
 private:
@@ -125,17 +191,31 @@ private:
                           RE::BSAnimationGraphEvent *event,
                           RE::BSTEventSource<RE::BSAnimationGraphEvent> *dispatcher) -> void
     {
-       //SKSE::log::info("catched on_animation call");
        if (!event || !event->holder) {
-           return old_func(this_, event, dispatcher);
+           return old_func_pc (this_, event, dispatcher);
        }
-       player_anim_handle(this_, event, dispatcher);
-       return old_func(this_, event, dispatcher);
+       player_anim_handle (this_, event, dispatcher);
+       return old_func_pc (this_, event, dispatcher);
     }
-
-    static inline REL::Relocation<decltype(new_func)> old_func;        
+    static inline REL::Relocation<decltype(new_func)> old_func_pc;
+    //static inline REL::Relocation<decltype(new_func)> old_func_npc;
 };
 
+
+class OnJump_Hook     // it hooks one of functions calls within the JumpHandler::ProcessButton function (in section where successful jump occured), so we can't decline the jump
+{
+  public:
+    static void install_hook()   {
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36271).address() + 0x190, new_func);
+    }
+  private:
+     static void new_func(RE::Actor* a)
+     {
+        if (a) a->RestoreActorValue (RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -12.f);
+        return old_func(a);
+     }
+     static inline REL::Relocation<decltype(new_func)> old_func;
+};
 
 
 class PhysDamageToActor_Hook     // works just before hit, but can't decline hit event itself
@@ -276,13 +356,13 @@ class OnAdjustActiveEffect_Hook        //    before adjust
 
 
 
-class OnEffectFinish_Hook           // хуки для каждого архетипа эффекта по отдельности. Пока используется только ValueModifier           
+class OnEffectFinish_Hook           // хуки для каждого архетипа эффекта по отдельности. Пока используется ValueModifier через соответствующий класс.           
 {
  public:
     static void install_hook()
     {
        REL::Relocation<std::uintptr_t> hook {RE::ValueModifierEffect::VTABLE[0]};
-       old_func = hook.write_vfunc(0x15,  new_func_4_valueMod);                         //   0x15  - finish.  Это должно хукать OnEffectFinish для ValueModifier эффектов
+       old_func = hook.write_vfunc(0x15,  new_func_4_valueMod);                         //   0x15  - оффсет виртуальной фнк. finish().  хук OnEffectFinish для ValueModifier эффектов
     }
 
  private:
@@ -294,8 +374,6 @@ class OnEffectFinish_Hook           // хуки для каждого архет
 
     static inline REL::Relocation<decltype(new_func_4_valueMod)> old_func;
 };
-
-
 inline bool is_playable_spell (RE::SpellItem* spel)
 {
     using ST = RE::MagicSystem::SpellType;
@@ -317,7 +395,7 @@ class CastSpeed_Hook
     }
 
  private:
-    static void new_func(RE::MagicCaster* mcaster, float dtime)
+    static void new_func (RE::MagicCaster* mcaster, float dtime) // mcaster = this
     {
        using S = RE::MagicCaster::State;
        uint32_t state = mcaster->state.underlying();
@@ -339,6 +417,21 @@ class CastSpeed_Hook
 };
 
 
+class OnProjectileLaunch_Hook        //  on projectile laucnhes
+{
+  public:
+    static void install_hook() {
+       old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33672).address() + 0x377, new_func);
+    }
+  private:
+    static void new_func (RE::ProjectileHandle* handle, RE::Projectile::LaunchData &ldata)
+    {
+       // my logic   // launchData can configure different lauch params
+       old_func (handle, ldata);
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+
 class OnMagicProjHit_Hook        //  on magic projectile hit target
 {
   public:
@@ -346,9 +439,9 @@ class OnMagicProjHit_Hook        //  on magic projectile hit target
        old_func = REL::Relocation<uintptr_t>(RE::VTABLE_MissileProjectile[0]).write_vfunc(0xBE, new_func);
     }
   private:
-    static bool new_func (RE::Projectile* proj,  RE::hkpCollidable*)
+    static bool new_func (RE::Projectile* this_,  RE::hkpCollidable*)
     {        
-        proj->linearVelocity *= -1;        //  turn proj back
+        //this_->linearVelocity *= -1;        //  turn proj back
         return false;
     }
     static inline REL::Relocation<decltype(new_func)> old_func;
@@ -363,7 +456,7 @@ public:
 private:
     static void new_func(RE::ArrowProjectile* arrow, RE::hkpAllCdPointCollector* collidable)
     {
-        bool needDefaultLogic = on_arrow_collide(arrow, collidable);
+        bool needDefaultLogic = on_arrow_collide (arrow, collidable);
         if (needDefaultLogic)  old_func(arrow, collidable);
     }
 
@@ -404,7 +497,6 @@ class OnManaPercentRegen_Hook
     static void install_hook() {
        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37511).address() + 0x68, new_func);
     }
-
   private:
     static void new_func(RE::Actor* actor, RE::ActorValue av, float value)
     {
@@ -413,21 +505,22 @@ class OnManaPercentRegen_Hook
        }
        old_func(actor, av, value);
     }
-
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
+
+// RE::VTABLE_PlayerCharacter[5] - по этому индексу лежит VFTable ActorValueOwner игрока, если нужно что-то хукать оттуда, например modAV
 
 class OnModActorValue_Hook
 {
 public:
     static void install_hook() {
-       REL::Relocation<uintptr_t> hook{RELOCATION_ID(258043, 0)};
+       REL::Relocation<uintptr_t> hook {RELOCATION_ID(258043, 0)};
        old_func = hook.write_vfunc(0x20, new_func);
     }
 
 private:
-    static void new_func(RE::ValueModifierEffect* this_, RE::Actor* actor, float value, RE::ActorValue av)
+    static void new_func (RE::ValueModifierEffect* this_, RE::Actor* actor, float value, RE::ActorValue av)
     {
        if (mys::reserved_MP > 0.f && actor->IsPlayerRef() && this_->actorValue == RE::ActorValue::kMagicka) {      // без бафов на резерв маны не уйдем дальше проверки mys::reserved_MP > 0
            if (this_->effect->baseEffect->IsDetrimental()) {
@@ -474,9 +567,9 @@ class OnModPeakActorValue_Hook
     static inline REL::Relocation<decltype(new_func)> old_func;
 };
 
+//------------------------------------------------------------------------------------------------------------------// EVENTS //-------------------
 using ActorKillev = RE::ActorKill::Event;
-
-class OnDeathEvent : public RE::BSTEventSink<ActorKillev>      // override ProcessEvent() and write our logic on death                                                          
+class OnDeathEvent : public RE::BSTEventSink<ActorKillev>        // death event                                            
 {
 public:
     virtual RE::BSEventNotifyControl ProcessEvent (const ActorKillev* evn, RE::BSTEventSource<ActorKillev>*) override
@@ -488,45 +581,66 @@ public:
        static OnDeathEvent singleton;
        return std::addressof(singleton);
     }
-    void enable()  // this we call to register event listening
+    void register_()  //  register event listening
     {
        RE::ActorKill::GetEventSource()->AddEventSink(this);
     }
 };
 
-
-class MenuOpenCloseEventSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+class OnActivateEvent : public RE::BSTEventSink<RE::TESActivateEvent>      // activate event                                                  
 {
 public:
-    virtual RE::BSEventNotifyControl ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+    virtual RE::BSEventNotifyControl ProcessEvent (const RE::TESActivateEvent* evn, RE::BSTEventSource<RE::TESActivateEvent>*) override
     {
-        if (ev) {
-           if (ev->menuName == "Sleep/Wait Menu")
-           {
-                if (ev->opening) on_wait_menu_open();
-                else             on_wait_menu_close();
-           }
-           else if (ev->menuName == "InventoryMenu")
-           {
-                if (ev->opening) on_inventory_open();
-                else             on_inventory_close();
-           }
-        }
-        return RE::BSEventNotifyControl::kContinue;
+       on_activate (evn->actionRef, evn->objectActivated);
+       return RE::BSEventNotifyControl::kContinue;
     }
-
-    static MenuOpenCloseEventSink* GetSingleton() {
-        static MenuOpenCloseEventSink singleton;
-        return std::addressof(singleton);
+    static OnActivateEvent* GetSingleton() {
+       static OnActivateEvent singleton;
+       return std::addressof(singleton);
     }
-    void enable()
-    { 
-        RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
+    void register_() {
+        RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESActivateEvent>()->AddEventSink(this);
     }
 };
 
+class LocationChangeEvent : public RE::BSTEventSink<RE::TESActorLocationChangeEvent>   // change location event                                                       
+{
+public:
+    virtual RE::BSEventNotifyControl ProcessEvent (const RE::TESActorLocationChangeEvent* evn, RE::BSTEventSource<RE::TESActorLocationChangeEvent>*) override
+    {
+       on_location_change (evn->actor, evn->oldLoc, evn->newLoc);
+       return RE::BSEventNotifyControl::kContinue;
+    }
+    static LocationChangeEvent* GetSingleton() {
+        static LocationChangeEvent singleton;
+       return std::addressof(singleton);
+    }
+    void register_() {
+        RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESActorLocationChangeEvent>()->AddEventSink(this);
+    }
+};
 
-//------------------------------------------------------ for descriptions --------------------------
+class ObjectLoadedEvent : public RE::BSTEventSink<RE::TESObjectLoadedEvent>   // object loaded event
+{
+public:
+    virtual RE::BSEventNotifyControl ProcessEvent (const RE::TESObjectLoadedEvent* evn, RE::BSTEventSource<RE::TESObjectLoadedEvent>*) override
+    {
+       on_object_loaded (evn->formID, evn->loaded);
+       return RE::BSEventNotifyControl::kContinue;
+    }
+    static ObjectLoadedEvent* GetSingleton() {
+        static ObjectLoadedEvent singleton;
+       return std::addressof(singleton);
+    }
+    void register_() {
+        RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESObjectLoadedEvent>()->AddEventSink(this);
+    }
+};
+// ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+//------------------------------------------------------ for xdescriptions --------------------------
 
 namespace pch_
 {
@@ -768,88 +882,230 @@ namespace description_hooks
             static inline void install_hook()
             {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(269321, 215652)};
-                old_func = hook.write_vfunc(idx, new_func);
-            }
-        };
-        struct MagicMenuHookTwo
-        {
-            static RE::UI_MESSAGE_RESULTS new_func (RE::IMenu* a_menu, float a_interval, std::uint32_t a_currentTime)
-            {
-                auto result = old_func(a_menu, a_interval, a_currentTime);
-                applyDescription(a_menu);
-                return result;
-            };
-            static inline std::uint32_t idx = 0x5;
-            static inline REL::Relocation<decltype(new_func)> old_func;
+				old_func = hook.write_vfunc(idx, new_func);
+			}
+		};
+		struct MagicMenuHookTwo
+		{
+			static RE::UI_MESSAGE_RESULTS new_func(RE::IMenu* a_menu, float a_interval, std::uint32_t a_currentTime)
+			{
+				auto result = old_func(a_menu, a_interval, a_currentTime);
+				applyDescription(a_menu);
+				return result;
+			};
+			static inline std::uint32_t idx = 0x5;
+			static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
-                REL::Relocation<uintptr_t> hook{RELOCATION_ID(269321, 215652)};
-                old_func = hook.write_vfunc(idx, new_func);
-            }
-        };
-        struct CraftingMenuHook
-        {
-            static RE::UI_MESSAGE_RESULTS new_func(RE::CraftingMenu* a_menu, RE::UIMessage& a_message)
-            { 
-                auto result = old_func(a_menu, a_message);
-                applyDescription(a_menu, "_root.Menu.ItemInfo");
-                return result;
-            };
-            static inline std::uint32_t idx = 0x4;
-            static inline REL::Relocation<decltype(new_func)> old_func;
+			static inline void install_hook()
+			{
+				REL::Relocation<uintptr_t> hook{ RELOCATION_ID(269321, 215652) };
+				old_func = hook.write_vfunc(idx, new_func);
+			}
+		};
+		struct CraftingMenuHook
+		{
+			static RE::UI_MESSAGE_RESULTS new_func(RE::CraftingMenu* a_menu, RE::UIMessage& a_message)
+			{
+				auto result = old_func(a_menu, a_message);
+				applyDescription(a_menu, "_root.Menu.ItemInfo");
+				return result;
+			};
+			static inline std::uint32_t idx = 0x4;
+			static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
-                REL::Relocation<uintptr_t> hook{RELOCATION_ID(268432, 215111)};
-                old_func = hook.write_vfunc(idx, new_func);
-            }
-        };
-        struct CraftingMenuHookTwo
-        {
-            static RE::UI_MESSAGE_RESULTS new_func(RE::IMenu* a_menu, float a_interval, std::uint32_t a_currentTime)
-            {
-                auto result = old_func(a_menu, a_interval, a_currentTime);
-                applyDescription(a_menu, "_root.Menu.ItemInfo");
-                return result;
-            };
-            static inline std::uint32_t idx = 0x5;
-            static inline REL::Relocation<decltype(new_func)> old_func;
+			static inline void install_hook()
+			{
+				REL::Relocation<uintptr_t> hook{ RELOCATION_ID(268432, 215111) };
+				old_func = hook.write_vfunc(idx, new_func);
+			}
+		};
+		struct CraftingMenuHookTwo
+		{
+			static RE::UI_MESSAGE_RESULTS new_func(RE::IMenu* a_menu, float a_interval, std::uint32_t a_currentTime)
+			{
+				auto result = old_func(a_menu, a_interval, a_currentTime);
+				applyDescription(a_menu, "_root.Menu.ItemInfo");
+				return result;
+			};
+			static inline std::uint32_t idx = 0x5;
+			static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
-                REL::Relocation<uintptr_t> hook{RELOCATION_ID(268432, 215111)};
-                old_func = hook.write_vfunc(idx, new_func);
-            }
-        };
+			static inline void install_hook()
+			{
+				REL::Relocation<uintptr_t> hook{ RELOCATION_ID(268432, 215111) };
+				old_func = hook.write_vfunc(idx, new_func);
+			}
+		};
 
-        static void Menu_Hooks_Install()
-        {
-            InventoryMenuHook::install_hook();
-            InventoryMenuHookTwo::install_hook();
-            BarterMenuHook::install_hook();
-            BarterMenuHookTwo::install_hook();
-            ContainerMenuHookTwo::install_hook();
-            ContainerMenuHook::install_hook();
-            GiftMenuHook::install_hook();
-            GiftMenuHookTwo::install_hook();
-            //MagicMenuHook::install_hook();
-            //MagicMenuHookTwo::install_hook();
-            //CraftingMenuHook::install_hook();
-            //CraftingMenuHookTwo::install_hook();
-        }
-    }
+		static void Menu_Hooks_Install()
+		{
+			InventoryMenuHook::install_hook();
+			InventoryMenuHookTwo::install_hook();
+			BarterMenuHook::install_hook();
+			BarterMenuHookTwo::install_hook();
+			ContainerMenuHookTwo::install_hook();
+			ContainerMenuHook::install_hook();
+			GiftMenuHook::install_hook();
+			GiftMenuHookTwo::install_hook();
+			//MagicMenuHook::install_hook();
+			//MagicMenuHookTwo::install_hook();
+			//CraftingMenuHook::install_hook();
+			//CraftingMenuHookTwo::install_hook();
+		}
+	}
 
-    static inline void Install_Hooks()
-    {
-        ItemCardHooks::ItemCardPopulateHook::install_hook();
-        ItemCardHooks::ItemCardPopulateHook2::install_hook();
-        MenuHooks::Menu_Hooks_Install();
-    }
+	static inline void Install_Hooks()
+	{
+		ItemCardHooks::ItemCardPopulateHook::install_hook();
+		ItemCardHooks::ItemCardPopulateHook2::install_hook();
+		MenuHooks::Menu_Hooks_Install();
+	}
 }
+
+
 
 //-----------------------------------------------------------------------------------------------------
 
+//----------- test ----------------
+
+
+// OnGetWeaponTemperingHealth: (REL::ID(15778).address() + 0x27, new_func)  /  new_func (RE::InventoryEntryData* entryData)  //  1401D72C0 (GetDamage)  +  0x27 (GetCurrTemperHealth_1401D64E0)
+
+
+class Test_Function_Hook1
+{
+public:
+	static void install_hook() {
+		old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(40356).address() + 0x113, new_func);   //   lightWeight update?
+	}
+private:
+	static bool new_func(RE::AIProcess* actorProcess, RE::Actor* actor, bool someBool)
+	{
+       SKSE::log::info("++++++++++ I HOOK");
+       auto ret = old_func (actorProcess, actor, someBool);
+	   //RE::DebugNotification(std::to_string(ret).c_str());
+
+	   int level = 0;
+	   if (actorProcess) {
+           if (actorProcess->high) level = 1;
+           if (actorProcess->middleHigh) level = 2;
+           if (actorProcess->middleLow) level = 3;
+       }
+	   if (actor)
+	       SKSE::log::info("++++++++++, actor - {}, someBool - {}, ret - {}, processLevel - {}", actor->GetName(), someBool, ret, level);
+       return ret;   
+	   //old_func (actor, someFloat);
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};	
+
+class Test_Function_Hook2        // 
+{
+  public:
+    static void install_hook() {
+          old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(42844).address() + 0x22f, new_func);  // get detection level
+    }
+  private:
+    static int new_func (RE::Actor* target, RE::Actor* sneaker, uint32_t unk)
+    {
+       auto ret = old_func (target, sneaker, unk); 
+       if (target && sneaker)
+           SKSE::log::info(" +++++ target - {}, sneaker - {}, detectionLevel - {}", target->GetName(), sneaker->GetName(), ret);
+       return ret;
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};	
+
+
+class Test_VFunc_Hook
+{
+public:
+    static void install_hook() {
+        old_func = REL::Relocation<uintptr_t>(RE::VTABLE_Actor[0]).write_vfunc(0xAD, new_func);   // Actor::update()
+    }
+ private:
+    static void new_func (RE::Actor *a_, float delta)
+    {
+		SKSE::log::info("Actor::update() works");
+        //float ret = old_func(player_, av, damageToAv);
+        if (a_) { // && a_->HasSpell(my::seph_training.p)) {
+            if (a_->currentProcess && a_->currentProcess->middleHigh) {
+				auto unk2A0 = a_->currentProcess->middleHigh->unk2A0;
+                SKSE::log::info("Actor - {}, midHigh->unk2A0 = {}", a_->GetName(), unk2A0);
+            }
+        }
+        old_func (a_, delta);
+    }
+    static inline REL::Relocation<decltype (new_func)> old_func;
+};
+
+// ------------------------------------------------------ disable shadows ----------------------------------------------------------------
+
+void stop_shadow_cast (RE::NiAVObject* a_object)   //   NiAVObject -> NiNode -> BSFaceGenNiNode  (inherit)
+{
+    RE::BSVisit::TraverseScenegraphGeometries(a_object, [&](RE::BSGeometry* a_geometry) -> RE::BSVisit::BSVisitControl {
+        const auto& effect = a_geometry->properties[RE::BSGeometry::States::kEffect];
+        const auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
+        if (lightingShader) {
+            lightingShader->SetFlags(RE::BSShaderProperty::EShaderPropertyFlag8::kCastShadows, false);   // set CastShadows flag = false
+        }
+        return RE::BSVisit::BSVisitControl::kContinue;
+	});
+}
+
+class DisableShadowsHook_OnStoreHeadNodes
+{
+  public:
+    static void install_hook() {
+       old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(24228, 24732).address() + RELOCATION_OFFSET(0x1CD, 0x15B), new_func);
+    }
+  private:
+    static void new_func (RE::Actor* a_actor, RE::NiAVObject* a_root, RE::BSFaceGenNiNode* a_faceNode)
+    {
+       old_func (a_actor, a_root, a_faceNode); 
+       if (a_actor && a_faceNode && !a_actor->IsPlayerRef()) {
+           stop_shadow_cast (a_faceNode);
+       }
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+class DisableShadowsHook_OnAttachArmor
+{
+  public:
+    static void install_hook() {
+       old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(15501, 15678).address() + RELOCATION_OFFSET(0xA13, 0xB60), new_func);
+    }
+  private:
+    static void new_func (RE::NiAVObject* NiAvObject_, RE::BSFadeNode* a_root3D)
+    {
+       old_func (NiAvObject_, a_root3D);
+       const auto user = (a_root3D && NiAvObject_) ? a_root3D->GetUserData() : nullptr;
+       const auto actor = user ? user->As<RE::Actor>() : nullptr;                        // check item's actor
+       if (actor && !actor->IsPlayerRef()) { 
+           stop_shadow_cast(NiAvObject_);
+       }
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+class DisableShadowsHook_OnAttachWeapon       // torches/weapons/anything with TESMODEL
+{
+  public:
+    static void install_hook() {
+       old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(15569, 15746).address() + RELOCATION_OFFSET(0x2DD, 0x2EC), new_func);
+    }
+  private:
+    static void new_func (RE::NiAVObject* NiAvObject_, RE::BSFadeNode* a_root3D)
+    {
+       old_func (NiAvObject_, a_root3D);
+       const auto user = (a_root3D && NiAvObject_) ? a_root3D->GetUserData() : nullptr;
+       const auto actor = user ? user->As<RE::Actor>() : nullptr;                        // check item's actor
+       if (actor && !actor->IsPlayerRef()) { 
+           stop_shadow_cast(NiAvObject_);
+       }
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+//------------------------------------------------------------------------------------
 
 static void SKSEMessageHandler (SKSE::MessagingInterface::Message* message)
 {
@@ -858,40 +1114,66 @@ static void SKSEMessageHandler (SKSE::MessagingInterface::Message* message)
            my::initGameData();
            mys::init_globs();
            OnPlayerUpdate_Hook::install_hook();
+           //OnCharacterUpdate_Hook::install_hook();  // any actor
            PhysDamageToActor_Hook::install_hook();
-           On_PlayerAnimEvent_Hook::install_hook();
+           On_AnimEvent_Hook::install_hook();
            HiddenSpeedMult_updater_Hook::install_hook();
            OnAdjustActiveEffect_Hook::install_hook();
            CastSpeed_Hook::install_hook();
            OnEquip_Hook::install_hook();
            OnUnEquip_Hook::install_hook();
+           OnDispel_Hook::install_hook();
+           OnJump_Hook::install_hook();
            //OnArrowHit_Hook::install_hook();
            OnArrowMeetsCollision_Hook::install_hook();
            On_MeleeWeapCollide_Hook::install_hook();
+		   //OnProjectileLaunch_Hook::install_hook();
            //OnMagicProjHit_Hook::install_hook();
            OnEffectFinish_Hook::install_hook();
            //OnApplyResist_Hook::install_hook();
            OnPlayerDrinkPotion_Hook::install_hook();
            OnApplyPoison_Hook::install_hook();
            //OnAttackAction_Hook::install_hook();
-           InputWatcher::GetSingleton()->enable();            // key press event
-           OnDeathEvent::GetSingleton()->enable();            // on  death event
-           MenuOpenCloseEventSink::GetSingleton()->enable();  // open/close menu event
-
            OnManaPercentRegen_Hook::install_hook();
            OnModActorValue_Hook::install_hook();
            OnModPeakActorValue_Hook::install_hook();
-           description_hooks::Install_Hooks();   // must be last
+           //DisableShadowsHook_OnAttachArmor::install_hook();
+           //DisableShadowsHook_OnAttachWeapon::install_hook();
+           //DisableShadowsHook_OnStoreHeadNodes::install_hook();
+
+		   // AI
+           //EvadeProjectileChanceNPC_Hook::install_hook();
+           //AttacksChanceNPC_Hook::install_hook();
+
+           //Test_Function_Hook1::install_hook();
+           //Test_Function_Hook2::install_hook();
+           //Test_VFunc_Hook::install_hook();
+
+           description_hooks::Install_Hooks();     // must be last
+
+		   InputWatcher::GetSingleton()->register_();            // key press event
+           OnDeathEvent::GetSingleton()->register_();            // death event
+           OnActivateEvent::GetSingleton()->register_();         // activate event
+           MenuOpenCloseEventSink::GetSingleton()->register_();  // open/close menu event
+           //LocationChangeEvent::GetSingleton()->register_();   // location change event
+           //ObjectLoadedEvent::GetSingleton()->register_();     // object loaded event
+
+           UISettings::get_singleton().load_From_INI();
+           RfadWidget::register_();
            break;
-        case SKSE::MessagingInterface::kPostLoadGame:        // Player's selected savegame has finished loading
+        case SKSE::MessagingInterface::kPostLoadGame:               // Player's selected savegame has finished loading
+           UISettings::get_singleton().load_From_INI();             // reload ui settings
+		   if (mys::widget_shown->value == 1.f) RfadWidget::on();
+           else RfadWidget::off();
            my::sf_handle_reserved_MP();
            break;
         case SKSE::MessagingInterface::kPreLoadGame:         // Log just before savegame loads
            log_pre_load_game(mys::player);
            break;
-        //case SKSE::MessagingInterface::kNewGame:            // new game
-        //   OnPlayerUpdate_Hook::install_hook();
-        //   break;
+        case SKSE::MessagingInterface::kNewGame:             // ng
+           //UISettings::get_singleton().load_From_INI();
+           //RfadWidget::show();
+           break;
     }
 }
 
@@ -907,14 +1189,17 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
     // SKSE::log::info("loaded");
 
     SKSE::Init(a_skse);
-    SetupLog();                             // Comment this line if you want to switch off the logger
-    SKSE::AllocTrampoline(1 << 10);
+    SetupLog();                             // comment this line to switch off the logger
+    SKSE::AllocTrampoline(1 << 10);         // ask SKSE to allocate some memory for our trampoline, don't use trampoline without this. we pass 1KB (1 << 10) to him, it's ok (c)
 
     g_messaging->RegisterListener("SKSE", SKSEMessageHandler);  // Message Handler implemented in SKSE plugin loader
 
     return true;
 
 }
+
+
+#undef RELOCATION_OFFSET
 
 
 

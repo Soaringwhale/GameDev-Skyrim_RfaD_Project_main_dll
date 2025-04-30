@@ -11,6 +11,8 @@ static std::vector<RE::SpellItem*> smalls;
 static std::vector<RE::SpellItem*> meds;     // mutagens
 static std::vector<RE::SpellItem*> bigs;
 
+static std::map<RE::FormID, RE::BGSKeyword*> bestiary_races_map;
+
 enum BossFight  // no need enum class, we want to compare with int, and don't want to use BossFight::
 {
     OlvePre2stage = 101,
@@ -49,9 +51,16 @@ namespace gameplay
 
    void knuckles_hit (RE::Actor* agr, RE::Actor* target, RE::TESObjectARMO *hands, float &damage, bool isPwAtk, bool isLeft)
    { 
-       //LOG("called knuckles_combo()");
+       LOG("called knuckles_hit()");
 
        int32_t price = hands->value; // base price
+
+	   auto st = agr->GetActorValue(RE::ActorValue::kStamina);
+       if      (agr->HasPerk(unarmed_80.p)) damage *= (1 + (st * 0.004f));  // unarmed perks stamina-scaling
+       else if (agr->HasPerk(unarmed_50.p)) damage *= (1 + (st * 0.003f));
+       else if (agr->HasPerk(unarmed_20.p)) damage *= (1 + (st * 0.002f));
+
+	   if (!isLeft && isPwAtk) damage *= 2.f;  // right hand pwAtk
 
        if (hands->HasKeyword(knuckles_bleeding.p)) {
            fish_bleed.p->effects[0]->effectItem.magnitude = price/100;  // bleed
@@ -91,16 +100,16 @@ namespace gameplay
        }
 
       //________DEBUG________________________________________________________________________
-      float atkDmgMult = 1.f, pwAtkDmgMult = 1.f, target_overcap = 1.f;    
+      //float atkDmgMult = 1.f, pwAtkDmgMult = 1.f, target_overcap = 1.f;    
       // прогоняем 1.f через ентри перков агрессора, что-бы узнать суммарные мульты. При этом проверяются кондишены, и мы получаем реальный мульт
-      RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, agr, my::myUnarmed.p, std::addressof(target_overcap));
-      RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, my::myUnarmed.p, target, std::addressof(atkDmgMult));
-      if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, my::myUnarmed.p, target, std::addressof(pwAtkDmgMult));
+      //RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, agr, my::myUnarmed.p, std::addressof(target_overcap));
+      //RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, my::myUnarmed.p, target, std::addressof(atkDmgMult));
+      //if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, my::myUnarmed.p, target, std::addressof(pwAtkDmgMult));
 
-       std::string left  = isLeft ? "LEFT" : "RIGHT";
-       std::string pwatk = isPwAtk ? "POWER" : "LIGHT";
-       LOG("FIST HIT: {}, {}, DAMAGE - {}, perks_AtkDamageMult - {}, perks_PWAtkDamageMult - {}, target_modIncomingDamage - {}",
-              left, pwatk, damage, atkDmgMult, pwAtkDmgMult, target_overcap);
+       //std::string left  = isLeft ? "LEFT" : "RIGHT";
+       //std::string pwatk = isPwAtk ? "POWER" : "LIGHT";
+       //LOG("FIST HIT: {}, {}, DAMAGE - {}, perks_AtkDamageMult - {}, perks_PWAtkDamageMult - {}, target_modIncomingDamage - {}",
+             // left, pwatk, damage, atkDmgMult, pwAtkDmgMult, target_overcap);
    }
 
    void regive_mutagen (RE::SpellItem *spell, RE::Actor* pl, int count)
@@ -357,7 +366,7 @@ namespace gameplay
 
       else if (fight == Sephiroth)
       {
-          if (counter >= 14)  // 28 sec
+          if (counter >= 15)  // 30 sec
           {
               u_cast_on_self(sephCast, currBoss);
               counter = 0;
@@ -365,12 +374,36 @@ namespace gameplay
       }
    }
 
-   void gmpl_on_micro_update()   // not used now
+   void check_bestiary (RE::Actor* actor)  // adds bestiary keywords to generic npc   (TO GAMEPLAY)
    {
-      if (olveState == 1) {                              // olve shield
-          //u_cast_on_self(olveShield, currBoss);
-          //olveState = 2;
-      }
+          LOG("called check_bestiary()");
+          if (actor->GetActorValue(RE::ActorValue::kMood) == 1.f) return;
+	      
+          auto race_id = actor->GetRace()->formID;
+          auto base = actor->GetActorBase();
+	      
+          if (bestiary_races_map.count(race_id) > 0) {
+              base->AddKeyword(bestiary_races_map.at(race_id));
+          }
+          else if (race_id == DraugrRace.p->formID) {
+              if (actor->GetLevel() < 75) base->AddKeyword(BestiaryDraugr.p);        // draugr
+              else                        base->AddKeyword(BestiaryHulkingDraugr.p); // strong draugr
+          }
+          else if (actor->HasSpell(AbForswornSkinchanges.p)) {                       // werewolf
+              if (actor->GetRace()->HasKeyword(DLC2Werebear.p))     base->AddKeyword(BestiaryWerebear.p);
+              else if (actor->GetRace()->HasKeyword(isBeastRace.p)) base->AddKeyword(BestiaryWerewolf.p);
+              else return; // prevent set mood = 1 in human form
+          }
+          else if (actor->HasSpell(AbSkeletonChampion.p))   base->AddKeyword(BestiarySkeletonGang.p);
+          else if (actor->IsInFaction(BearFaction.p))       base->AddKeyword(BestiaryBear.p);
+          else if (actor->IsInFaction(SabreCatFaction.p))   base->AddKeyword(BestiarySabrecat.p);
+          else if (actor->IsInFaction(LichFaction.p))       base->AddKeyword(BestiaryLich.p);
+          else if (actor->IsInFaction(ArchLichFaction.p))   base->AddKeyword(BestiaryGrandLich.p);
+          else if (actor->IsInFaction(BerserkFaction.p))    base->AddKeyword(BestiaryDraugrBerserk.p);
+          else if (actor->IsInFaction(CairnBGfaction.p))    base->AddKeyword(BestiaryBlackGuard.p);
+          else if (actor->IsInFaction(ValleyGhostFaction.p))base->AddKeyword(BestiaryValleyGhost.p);
+          
+          actor->SetActorValue(RE::ActorValue::kMood, 1.f);
    }
 
    void initGameplayData()
@@ -417,11 +450,27 @@ namespace gameplay
       smalls.emplace_back (m_green_small.p);
       smalls.emplace_back (m_blue_small.p);
       meds.emplace_back   (m_red_mid.p);
-      meds.emplace_back   (m_green_mid.p);
+      meds.emplace_back   (m_green_mid.p);   // mutagens 
       meds.emplace_back   (m_blue_mid.p);
       bigs.emplace_back   (m_red_big.p);
       bigs.emplace_back   (m_green_big.p);
       bigs.emplace_back   (m_blue_big.p);
+
+	  // bestiary [race;keyword] map
+      bestiary_races_map.emplace(WolfRace.p->formID, BestiaryWolf.p);
+      bestiary_races_map.emplace(FalmerRace.p->formID, BestiaryFalmer.p);
+      bestiary_races_map.emplace(SprigganRace.p->formID, BestiarySpriggan.p);
+      bestiary_races_map.emplace(TrollRace.p->formID, BestiarySimpleTroll.p);
+      bestiary_races_map.emplace(TrollFrostRace.p->formID, BestiaryFrostTroll.p);
+      bestiary_races_map.emplace(DLC1TrollRaceArmored.p->formID, BestiaryArmoredTroll.p);
+      bestiary_races_map.emplace(DLC1TrollFrostRaceArmored.p->formID, BestiaryArmoredFrostTroll.p);
+      bestiary_races_map.emplace(ChaurusRace.p->formID, BestiaryChaurus.p);
+      bestiary_races_map.emplace(ChaurusReaperRace.p->formID, BestiaryChaurusReaper.p);
+      bestiary_races_map.emplace(DLC1ChaurusHunterRace.p->formID, BestiaryChaurusHunter.p);
+      bestiary_races_map.emplace(FrostbiteSpiderRace.p->formID, BestiaryFrostbiteSpider.p);
+      bestiary_races_map.emplace(FrostbiteSpiderRaceGiant.p->formID, BestiaryFrostbiteSpider.p);
+      bestiary_races_map.emplace(FrostbiteSpiderRaceLarge.p->formID, BestiaryFrostbiteSpider.p);
+      bestiary_races_map.emplace(DLC1SoulCairnMistman.p->formID, BestiaryMistMan.p);
    }
 }
 
@@ -619,7 +668,7 @@ int priestsHelped ()
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x7D949)->currentStage > 10) x++;  // DA11Intro
     if (u_get_item_count(mys::player, 0x705C3) > 0) x++;    // Runil Journal
 
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -645,7 +694,7 @@ int tombQuestsDone ()
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x8ADFA)->currentStage > 30) x++;  // dunVolunruudQST (Kvenel)
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x6136B)->currentStage > 20) x++;  // FreeformSoljundsSinkholeA (miners)
 
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -655,7 +704,7 @@ int solsteimMasksFound()
     if (u_get_item_count(mys::player, 0x04024037) > 0) x++;  // zahkriisos
     if (u_get_item_count(mys::player, 0x040240FE) > 0) x++;  // ahzidal
     if (u_get_item_count(mys::player, 0x040240FF) > 0) x++;  // dukaan
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -673,7 +722,7 @@ int priestMasksFound()
     if (u_get_item_count(mys::player, 0x04024037) > 0) x++;  // 9  [zahkriisos]
     if (u_get_item_count(mys::player, 0x040240FE) > 0) x++;  // 10 [ahzidal]
     if (u_get_item_count(mys::player, 0x040240FF) > 0) x++;  // 11 [dukaan]
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -692,7 +741,7 @@ int blackBooksDone()
     if (qst::BBWindsQuest->currentStage    > 10) x++; 
     if (qst::BBFilamentQuest->currentStage > 10) x++;
     if (qst::DLC2MQ05->currentStage > 100) x++;
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -704,7 +753,7 @@ int ritualQuests()
     if (RE::TESForm::LookupByID<RE::TESQuest>(0x99F27)->currentStage > 100) x++;  // conjur
     if (RE::TESForm::LookupByID<RE::TESQuest>(0xCD987)->currentStage > 100) x++;  // restore
     if (RE::TESForm::LookupByID<RE::TESQuest>(0xD0755)->currentStage > 100) x++;  // alter
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -715,7 +764,7 @@ int staffsFound()
     if (u_get_item_count(mys::player, 0x1CB36) > 0) x++;   // rose
     if (u_get_item_count(mys::player, 0x35066) > 0) x++;   // skull
     if (u_get_item_count(mys::player, 0x2AC6F) > 0) x++;   // wabbajack
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -725,32 +774,32 @@ int essence_found ()
     if (u_get_item_count(mys::player, 0xFB8F94) > 0) x++;
     if (u_get_item_count(mys::player, 0x1D7CB9) > 0) x++;
     if (u_get_item_count(mys::player, 0x1D7CBA) > 0) x++;
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
 int altars_touched()
 {
     qst::currGoalVal->value = qst::altarsTouched.p->value;
-    return qst::currGoalVal->value;
+    return int(qst::currGoalVal->value);
 }
 
 int vampire_dust_have() {
     
     qst::currGoalVal->value = u_get_item_count(mys::player, 0x3AD76);  
-    return qst::currGoalVal->value;
+    return int(qst::currGoalVal->value);
 }
 
 int castle_mages_killed()
 {
     qst::currGoalVal->value = qst::castleMagesKilled->value;
-    return qst::currGoalVal->value;
+    return int(qst::currGoalVal->value);
 }
 
 int ambassadors_killed()
 {
     qst::currGoalVal->value = qst::ambassadorsKilled->value;
-    return qst::currGoalVal->value;
+    return int(qst::currGoalVal->value);
 }
 
 int daedra_guards_killed ()
@@ -761,7 +810,7 @@ int daedra_guards_killed ()
     if (qst::isVerminaBossDead->value > 0) x++;
     if (qst::sephirothQuest->currentStage > 50) x++;
     if (qst::DA02->currentStage > 30) x++;  // boethia guard
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -771,7 +820,7 @@ int arch_lich_killed ()
     if (qst::isAnachoretDead->value > 0) x++;
     if (qst::isSiltineDead->value > 0) x++;
     if (qst::isReaperDead->value > 0) x++;
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 
@@ -803,7 +852,7 @@ int daedra_artifacts_have ()
     if (u_get_item_count(mys::player, 0x2AC61) > 0) x++;  // savior hide
     if (u_get_item_count(mys::player, 0x52794) > 0) x++;  // ebony mail
     if (u_get_item_count(mys::player, 0x4A38F) > 0) x++;  // ebony blade
-    qst::currGoalVal->value = x;
+    qst::currGoalVal->value = float(x);
     return x;
 }
 

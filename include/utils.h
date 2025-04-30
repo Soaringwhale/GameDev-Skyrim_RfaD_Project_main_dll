@@ -20,83 +20,88 @@
 // 3) найти [\t]
 // 4) заменить на *4 пробела*
 
-auto u_form_has_keyword(const RE::TESForm* form, const RE::BGSKeyword* keyword) -> bool;
+enum class SkyrimEquipSlot   // EQUP game objects
+{
+    kRight,
+	kLeft,
+	kEitherHand,
+	kBothHands,
+	kPower,       // 'NONE' slot, this name for convenience
+	kVoice,
+	kShield,
+	kPotion
+};
 
-auto u_worn_has_keyword(RE::Actor* actor, RE::BGSKeyword* keyword) -> bool;
-
-auto u_get_weapon(const RE::Actor* actor, const bool is_left_hand) -> RE::TESObjectWEAP*;
-
-auto u_get_eff_secondary_av_name(const RE::ActiveEffect& active_effect) -> RE::ActorValue;
-
-auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> float;
-
-auto u_actor_has_active_mgef_with_keyword (RE::Actor* actor, const RE::BGSKeyword* keyword) -> bool;
+auto u_form_has_keyword (const RE::TESForm* form, const RE::BGSKeyword* keyword) -> bool;
+auto u_worn_has_keyword (RE::Actor* actor, RE::BGSKeyword* keyword) -> bool;
+auto u_get_effects_by_keyword (RE::Actor* actor, const RE::BGSKeyword* keyword) -> std::vector<RE::ActiveEffect*>;
+auto u_is_power_attacking (RE::Actor* actor) -> bool;
 
 auto u_same_activeEffects_count (RE::Actor* actor, const RE::EffectSetting* base_eff) -> uint32_t;
-
-auto u_cast (RE::SpellItem *spell, RE::Actor *target, RE::Actor  *caster) -> void;
-
-auto u_cast_on_self (RE::SpellItem* spell, RE::Actor* actor) -> void;
-
-auto u_is_power_attacking(RE::Actor *actor) -> bool;
-
-auto u_is_in_city (RE::Actor *actor) -> bool;
-
-auto u_place_at_me(RE::TESObjectREFR* target, RE::TESForm* form, std::uint32_t count, bool force_persist, bool initially_disabled) -> RE::TESObjectREFR*;
-
-auto u_get_effects_by_keyword(RE::Actor *actor, const RE::BGSKeyword *keyword) -> std::vector<RE::ActiveEffect*>;
-
-auto u_dispel_effect_from_actor(RE::ActiveEffect* effect, RE::Actor* actor) -> bool;
-
-auto u_get_secondary_resist_name(const RE::MagicItem *magic_item) -> RE::ActorValue;
-
-auto u_enchant_equipped_weapon (RE::InventoryChanges*, RE::TESBoundObject*, RE::ExtraDataList*, RE::EnchantmentItem*, int16_t) -> RE::ExtraDataList*;
-
-auto u_get_actor_value_max(RE::Actor* actor, const RE::ActorValue av) -> float;
-
-auto u_playSound(RE::Actor* a, RE::BGSSoundDescriptorForm* a_descriptor, float a_volumeOverride) -> void;
-
-void u_log_actor_perk_entries(RE::Actor* actor, RE::BGSPerkEntry::EntryPoint theEntry, std::string entryNameForLog = "");
-
-void u_kill_projectile (RE::Projectile* proj);
-
-void u_addItem (RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extraList = nullptr, int count = 1, RE::TESObjectREFR* fromRefr = nullptr);
-
-void u_player_addItem (RE::TESBoundObject* item, int count);
-
-auto u_get_item_count (RE::Actor* actor, uint32_t formid_) -> int32_t;
-
-auto u_PapyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) -> int32_t;
-
-bool u_setStage(RE::TESQuest* quest, uint16_t stage);
-
-void u_updQuestTextGlob (RE::TESQuest* quest, RE::TESGlobal *glob);
-
-auto u_get_actors_weap_ench (RE::Actor* a, bool left) -> RE::EnchantmentItem*;
-
-void u_remove_weap_ench (RE::InventoryEntryData *entry);
-
-auto u_get_pc_poison(bool is_left_hand) -> RE::ExtraPoison*;
-
-void u_remove_pc_poison(bool is_left_hand);
-
-auto u_get_worn_equip_weight(RE::Actor* actor) -> float;
+auto u_get_eff_secondary_av_name (const RE::ActiveEffect& active_effect) -> RE::ActorValue;
+auto u_get_secondary_resist_name (const RE::MagicItem* magic_item) -> RE::ActorValue;
+auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> float;
+auto u_actor_has_active_mgef_with_keyword (RE::Actor* actor, const RE::BGSKeyword* keyword) -> bool;
 
 auto u_damage_av (RE::Actor* actor, RE::ActorValue av, float magn) -> void;
+auto u_get_av_percent (RE::Actor* actor, RE::ActorValue av) -> float;
+auto u_get_actor_value_max (RE::Actor* actor, const RE::ActorValue av) -> float;
 
-void u_update_speedMult(RE::Actor* actor);
+auto u_cast (RE::SpellItem *spell, RE::Actor *target, RE::Actor  *caster) -> void;
+auto u_cast_on_self (RE::SpellItem* spell, RE::Actor* actor) -> void;
 
-int  u_get_game_statistic(std::string statName);
+auto u_is_in_city (RE::Actor *actor) -> bool;
+auto u_place_at_me (RE::TESObjectREFR* target, RE::TESForm* form, std::uint32_t count, bool force_persist, bool initially_disabled) -> RE::TESObjectREFR*;
 
+void u_jump (RE::Actor* actor);
+void u_update_speedMult (RE::Actor* actor);
+void u_turn_controls_on_off (bool status_);
+void u_move_all_followers_to_player (const bool followers, const bool summons);
+
+auto u_get_equipped_spell_by_slot (RE::Actor*, RE::MagicSystem::CastingSource) -> RE::SpellItem*;
+auto u_get_equipped_shout (RE::Actor* actor) -> RE::TESShout*;
+auto u_get_current_casting_spell (RE::Actor* actor, uint32_t mcasterSlot) -> RE::MagicItem*;
+auto u_get_worn_equip_weight (RE::Actor* actor) -> float;
+auto u_get_all_worn_objects (const RE::TESObjectREFR::InventoryItemMap &) -> RE::TESObjectREFR::InventoryItemMap;
+auto u_get_weapon (const RE::Actor* actor, const bool is_left_hand) -> RE::TESObjectWEAP*;
+
+auto u_dispel_effect_from_actor (RE::ActiveEffect* effect, RE::Actor* actor) -> bool;
+
+void u_remove_all_items (RE::Actor* actor);
+auto u_get_item_count (RE::Actor* actor, uint32_t formid_) -> int32_t;
+auto u_PapyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) -> int32_t;
+void u_addItem (RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extraList = nullptr, int count = 1, RE::TESObjectREFR* fromRefr = nullptr);
+void u_equip_item (RE::Actor*, RE::TESBoundObject*, std::optional<SkyrimEquipSlot> slot = std::nullopt);
+void u_equip_spell (RE::Actor*, RE::SpellItem*, SkyrimEquipSlot);
+
+bool u_setStage (RE::TESQuest* quest, uint16_t stage);
+void u_updQuestTextGlob (RE::TESQuest* quest, RE::TESGlobal *glob);
+int  u_get_game_statistic (std::string statName);
 auto u_get_entered_console_commands() -> std::string;
 
+auto u_get_actors_weap_extra_ench (RE::Actor* a, bool left) -> RE::EnchantmentItem*;
+auto u_enchant_equipped_weapon (RE::InventoryChanges*, RE::TESBoundObject*, RE::ExtraDataList*, RE::EnchantmentItem*, int16_t) -> RE::ExtraDataList*;
+void u_remove_weap_ench (RE::InventoryEntryData *entry);
+
+auto u_get_pc_poison (bool is_left_hand) -> RE::ExtraPoison*;
+void u_remove_pc_poison (bool is_left_hand);
+
 auto u_int2hex (int decimal) -> std::string;
+auto u_trimmed_str (float number) -> std::string;
+
+auto u_req_inc_damage() -> float;  // requiem damage taken like x1.5
+auto u_req_out_damage() -> float;  // requiem damage dealt like x1.5
+
+auto u_get_open_state (RE::TESObjectREFR *refr) -> uint32_t;
 
 void u_SendInventoryUpdateMessage (RE::TESObjectREFR* a_inventoryRef, const RE::TESBoundObject* a_updateObj);
 
-auto u_req_inc_damage() -> float;  // requiem damage taken like x1.5
+void u_log_actor_perk_entries (RE::Actor* actor, RE::BGSPerkEntry::EntryPoint theEntry, std::string entryNameForLog = "");
 
-auto u_req_out_damage() -> float;  // requiem damage dealt like x1.5
+auto u_playSound (RE::Actor* a, RE::BGSSoundDescriptorForm* a_descriptor, float a_volumeOverride) -> void;
+
+void u_kill_projectile (RE::Projectile* proj);
+
 
 
 namespace Utils_anim_namespace
@@ -255,20 +260,10 @@ static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
         };
  }
 
-    // вручную прогнать значение через ентри перков актера, к примеру прогнать урон через все mod incoming damage, либо спел через все mod incoming spell magnitude
-
-    // float damage_resist = 1.f;    //  сюда по ссылке вернется множитель после прогона через ентри 
-    // RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, hit_data->aggressor,  hit_data->weapon,  std::addressof(damage_resist));
-    // для спела они другие
 
     // RE::TESObjectWEAP *playerWeap = form->As<RE::TESObjectWEAP>();
     // .As<>() - СКСЕшный способ приведения, шаблонный метод, внутри там cast RE::TESObjectWEAP *playerWeap = static_cast<RE::TESObjectWEAP*>(form); 
     // c++ способ приведения через cast напрямую, должен тоже работать.
-
-    // RE::Effect*
-    // RE::EffectItem*
-    // RE::EffectSetting*
-    // RE::ActiveEffect*
 
     /*enum class WEAPON_TYPE {
         kHandToHandMelee = 0,
@@ -282,6 +277,16 @@ static_assert(sizeof(BGSEntryPointFunctionDataTwoValue) == 0x10);
         kStaff = 8,
         kCrossbow = 9
     };*/
+
+    // auto state = pl->actorState1;                                      // actor state - movement dir
+    // if      (state.movingForward > 0)
+    // else if (state.movingBack    > 0) //...
+
+    // if (state.meleeAttackState == RE::ATTACK_STATE_ENUM::kBowDrawn);   // actor state - bow drawn
+ 
+    // if ((actor->formFlags & 0x800) != 0 )                                 // check form flags  IDA ver
+    // if ((actor->formFlags & RE::TESForm::RecordFlags::kDisabled) != 0 )   // check form flags  clib ver
+
 
     //---------------------  for input events  etc  from jarari ----------------------
 

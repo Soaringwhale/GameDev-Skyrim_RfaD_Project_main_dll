@@ -5,7 +5,7 @@
 
 using namespace RE;
 
-BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)        //  ProcessEvent() это непосредственно обработка нажатий.
+BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)      //  обработка нажатий
 {
     if (!*evns) return RE::BSEventNotifyControl::kContinue;
 

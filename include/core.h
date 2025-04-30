@@ -18,6 +18,11 @@ namespace my
 
     //static GamePtr<RE::TESObjectMISC> additemMenuPack (0x690D, "AddItemMenuSE.esp");
 
+
+	// static GamePtr<RE::TESActorBase> LydiaBase (0xA2C8E);    // TEST FOR RP , DELETE LATER !!!
+
+    static GamePtr<RE::BGSKeyword> no_dispel (0xC287DC, "RfaD SSE - Awaken.esp");
+
     static GamePtr<RE::SpellItem> deleteSavesEnabled (0x97C5DD, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> logEnabled (0x874CA5, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> logEnabler (0x874CA4, "RfaD SSE - Awaken.esp");
@@ -25,9 +30,9 @@ namespace my
     static GamePtr<RE::TESGlobal> xp_mult (0x8C0CEA, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> xp_points (0x800, "Requiem for a Dream - Experience.esp");
 
+	static GamePtr<RE::EffectSetting> moveAliesToPlayer (0xC60394, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> quen_barrier (0x74EA96, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> quen_expl (0x758CD6, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESGlobal> quen_convertRate (0x753BC6, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> kd_on_self (0x758CD9, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> quen_onHitSoundVisual (0x75DDFE, "RfaD SSE - Awaken.esp");
 
@@ -88,22 +93,22 @@ namespace my
     static GamePtr<RE::TESGlobal> nb_magicBlade(0xDF100A, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> atronachAbsorbChanceGlob(0x87A67A, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> bossFightID(0x1C7FFB, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::SpellItem> redguardFF(0x284194, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::SpellItem> argonianFF(0x3A04AC, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::SpellItem> khajeetFF(0xEB1866, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::SpellItem> bloodBrand(0x238167, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> redguardFF (0x284194, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> argonianFF (0x3A04AC, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> khajeetFF (0xEB1866, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> bloodBrand (0x238167, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> bloodBoil_HP_Buff(0xB72963, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> bloodBrandEf (0x238169, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::EffectSetting> bloodBrandNovaEf (0xB72961, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESEffectShader> bloodBubbles_FX(0xBAE83, "Apocalypse - Magic of Skyrim.esp");
-    static GamePtr<RE::TESEffectShader> bloodFire_FX(0xBFAC0, "Apocalypse - Magic of Skyrim.esp");
-    static GamePtr<RE::TESEffectShader> bleedShader_FX(0x9FC16, "Apocalypse - Magic of Skyrim.esp");
+    static GamePtr<RE::EffectSetting> bloodBrandNovaEf  (0xB72961, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::TESEffectShader> bloodBubbles_FX (0xBAE83, "Apocalypse - Magic of Skyrim.esp");
+    static GamePtr<RE::TESEffectShader> bloodFire_FX (0xBFAC0, "Apocalypse - Magic of Skyrim.esp");
+    static GamePtr<RE::TESEffectShader> bleedShader_FX (0x9FC16, "Apocalypse - Magic of Skyrim.esp");
     static GamePtr<RE::BGSPerk> heliotrope (0xA14F7A, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> longStrideEff (0x6499, "Apocalypse - Magic of Skyrim.esp");
     static GamePtr<RE::SpellItem> nb_2_Twin_FF(0xD72531, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> nb_main_holdFF(0xDD298F, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> snowElf_insteadEnch(0xC2E0EE, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSPerk> snowElf_anabioz(0x800C10, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSPerk> snowElf_anabioz (0x800C10, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> snowElf_raceAb(0x7D3169, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> nb_sting(0xDAF204, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> nb_sting_hold (0xDB942B, "RfaD SSE - Awaken.esp");
@@ -161,8 +166,8 @@ namespace my
 
     static GamePtr<RE::SpellItem> oil_after_use(0x23C924, "RfaD SSE - Awaken.esp");
 
-    static GamePtr<RE::EffectSetting> race_ab_kd(0x284198, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::EffectSetting> bats_kd(0x7DBDF8, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::EffectSetting> race_ab_kd (0x284198, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::EffectSetting> bats_kd (0x7DBDF8, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSMessage> msgBoxDodge(0xB542F4, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSMessage> msgBoxAbils(0xE83EDB, "RfaD SSE - Awaken.esp");
 
@@ -228,10 +233,19 @@ namespace my
     //static GamePtr<RE::SpellItem> rbb_univ_spell (0x2FAD46, "Requiem - Breaking Bad.esp");
 
     //---------------------------------------------------------------------------------------- skyrim.esm -----
-    static GamePtr<RE::BGSKeyword> MagicVampireDrain (0x101BDE);
-    static GamePtr<RE::BGSKeyword> actorDwarven(0x1397A);    //
-    static GamePtr<RE::BGSKeyword> alch_heal_KW(0x42503);    //
-    static GamePtr<RE::BGSKeyword> magicSlow (0xB729E);    //
+    static GamePtr<RE::BGSEquipSlot> slotRightHand (0x13F42);   // 
+    static GamePtr<RE::BGSEquipSlot> slotLeftHand  (0x13F43);   //
+    static GamePtr<RE::BGSEquipSlot> slotEitherHand(0x13F44);   //   
+    static GamePtr<RE::BGSEquipSlot> slotBothHands (0x13F45);   //  }  skyrim equip slots (EQUP)
+    static GamePtr<RE::BGSEquipSlot> slotVoice     (0x25BEE);   // 
+    static GamePtr<RE::BGSEquipSlot> slotShield    (0x141E8);   // 
+	static GamePtr<RE::BGSEquipSlot> slotPotion    (0x35698);   //
+
+    static GamePtr<RE::TESObjectWEAP> vanillaUnarmed (0x1F4);    // 
+    static GamePtr<RE::BGSKeyword> MagicVampireDrain (0x101BDE); //
+    static GamePtr<RE::BGSKeyword> actorDwarven(0x1397A);        //
+    static GamePtr<RE::BGSKeyword> alch_heal_KW(0x42503);        //
+    static GamePtr<RE::BGSKeyword> magicSlow (0xB729E);          //
     static GamePtr<RE::BGSKeyword> magicShout (0x46B99);     //
     static GamePtr<RE::BGSKeyword> bound1H (0x510BE);        //
     static GamePtr<RE::BGSKeyword> bound2H (0x84D1D);        // 
@@ -259,64 +273,9 @@ namespace my
     static GamePtr<RE::BGSPerk> nb_perk_2(0x59B78);          //
     static GamePtr<RE::BGSSoundDescriptorForm> slashSound (0xDAB81);        //
     static GamePtr<RE::BGSSoundDescriptorForm> vampireHeartBeat (0xFF9E8);  //
-    // bestiary checks
-    static GamePtr<RE::TESRace> FalmerRace  (0x131F4);
-    static GamePtr<RE::TESRace> SprigganRace(0x13204); 
-    static GamePtr<RE::TESRace> TrollRace   (0x13205);
-    static GamePtr<RE::TESRace> TrollFrostRace (0x13206);
-    static GamePtr<RE::TESRace> ChaurusRace (0x131EB);
-    static GamePtr<RE::TESRace> ChaurusReaperRace (0xA5601);
-    static GamePtr<RE::TESRace> FrostbiteSpiderRace      (0x131F8);
-    static GamePtr<RE::TESRace> FrostbiteSpiderRaceGiant (0x4E507);  // spider fact contain many creatures, so use races
-    static GamePtr<RE::TESRace> FrostbiteSpiderRaceLarge (0x53477);
-    static GamePtr<RE::TESRace> DraugrRace (0xD53);
-    static GamePtr<RE::TESRace> WolfRace           (0x1320A);  // wolf fact contain nix-hound etc, so use race
-    static GamePtr<RE::TESFaction> BearFaction     (0xFBBF3);  // bear races are x3, so use fact
-    static GamePtr<RE::TESFaction> SabreCatFaction (0x435A2);
-    static GamePtr<RE::BGSKeyword> isBeastRace (0xD61D1);
-    // static GamePtr<RE::TESRace> WerewolfBeastRace (0xCDD84);
-    
-    //============================================================================================================= skyrim.esm ====
 
-    // bestiary checks
-    static GamePtr<RE::TESRace> DLC1TrollRaceArmored      (0x117F5, "Dawnguard.esm");
-    static GamePtr<RE::TESRace> DLC1TrollFrostRaceArmored (0x117F4, "Dawnguard.esm");
-    static GamePtr<RE::TESRace> DLC1ChaurusHunterRace     (0x51FB,  "Dawnguard.esm");
-    static GamePtr<RE::TESRace> DLC1SoulCairnMistman      (0x894D,  "Dawnguard.esm");
-    static GamePtr<RE::TESFaction> LichFaction     (0xA471FC, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESFaction> ArchLichFaction (0xA471FB, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESFaction> BerserkFaction  (0xA5653A, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESFaction> CairnBGfaction  (0xA60765, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESFaction> ValleyGhostFaction (0xFC7A,  "Requiem for a Dream - Kelpie.esp");
-    static GamePtr<RE::SpellItem> AbForswornSkinchanges (0x2E576, "Requiem for a Dream - Kelpie.esp");
-    static GamePtr<RE::SpellItem> AbSkeletonChampion (0x33812, "Requiem - Beware The Dead.esp");
-    static GamePtr<RE::BGSKeyword> DLC2Werebear  (0x34FB7, "Dragonborn.esm");
+    //=============================================================================================================
 
-    // bestiary keywords
-    static GamePtr<RE::BGSKeyword> BestiaryFalmer            (0xA420DF, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiarySpriggan          (0xA420E0, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryFrostTroll        (0xA420E1, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiarySimpleTroll       (0xA420E2, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryArmoredTroll      (0xA420E3, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryArmoredFrostTroll (0xA420E4, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryWolf              (0xA420E5, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryBear              (0xA420E6, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiarySabrecat          (0xA420E7, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryChaurus           (0xA420E8, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryChaurusReaper     (0xA420E9, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryChaurusHunter     (0xA420EA, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryFrostbiteSpider   (0xA420EB, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryLich              (0xA4C312, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryGrandLich         (0xA4C313, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryDraugr            (0xA51427, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryHulkingDraugr     (0xA51428, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryDraugrBerserk     (0xA51429, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiarySkeletonGang      (0xAE4327, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryMistMan           (0xA60762, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryBlackGuard        (0xA60763, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryValleyGhost       (0xA60764, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryWerewolf          (0xA7EDD4, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> BestiaryWerebear          (0xA7EDD5, "RfaD SSE - Awaken.esp");
    
     static RE::EffectSetting* sf_descr;
     static RE::TESGlobal *glob_destr_1, *glob_destr_2, *glob_destr_3, *glob_alter_1, *glob_alter_2, *glob_alter_3;
@@ -380,6 +339,7 @@ struct mys                        //  variables that can be used in all project 
     static RE::BGSPerk         *dodgePerk;
     static RE::TESGlobal     *speed_cast_glob;
     static RE::TESGlobal     *gameProcessed;
+	static RE::TESGlobal     *widget_shown;
 
     static void init_globs();
     static void handle_keyPress(uint32_t keyCode, float hold_time, bool is_up, bool is_held);
@@ -390,7 +350,7 @@ float allOnHitEffects(RE::Actor* target, RE::HitData hit_data);
 
 void player_anim_handle(RE::BSTEventSink<RE::BSAnimationGraphEvent>*, RE::BSAnimationGraphEvent*, RE::BSTEventSource<RE::BSAnimationGraphEvent>*);
 
-float on_resist_apply(RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect, const RE::TESBoundObject* bound_object);
+float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect, const RE::TESBoundObject* bound_object);
 
 bool on_drink_potion(RE::Actor* actor, RE::AlchemyItem* potion, RE::ExtraDataList* extra_data_list);
 
@@ -400,12 +360,13 @@ bool on_arrow_collide(RE::ArrowProjectile* arrow, RE::hkpAllCdPointCollector* co
 
 bool on_meleeWeap_collide (RE::Actor* attacker, RE::Actor* victim);
 
-void on_equip(RE::Actor* actor, RE::TESBoundObject* object);
-
-void on_unequip(RE::Actor* actor, RE::TESBoundObject* object);
+void on_equip  (RE::Actor* actor, RE::TESBoundObject* object, RE::ObjectEquipParams* params);
+void on_unequip(RE::Actor* actor, RE::TESBoundObject* object, RE::ObjectEquipParams* params);
 
 void on_death (RE::Actor* victim, RE::Actor* killer);
-
+void on_activate (RE::TESObjectREFRPtr whoActivated, RE::TESObjectREFRPtr objectActivated);
+void on_location_change (RE::TESObjectREFRPtr refHandle, RE::BGSLocation* oldLoc, RE::BGSLocation* newLoc);    // events
+void on_object_loaded (RE::FormID formID, bool loaded);
 void on_wait_menu_open();
 void on_wait_menu_close();
 void on_inventory_open();
@@ -420,6 +381,8 @@ void on_valueMod_Effect_Finish(RE::ValueModifierEffect* modEff);
 void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item);
 
 void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int &count);
+
+void toggle_numbers_widget ();   // impl in ui.cpp
 
 //bool on_arrow_collide(RE::Projectile* proj, RE::hkpCollidable* coll); 
 
