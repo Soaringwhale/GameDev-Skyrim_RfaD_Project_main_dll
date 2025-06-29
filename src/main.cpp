@@ -52,8 +52,7 @@ void hooks::install_hooks()
     OnPlayerUpdate_Hook::install_hook();
     //OnCharacterUpdate_Hook::install_hook();  // any actor
     //OnRefrInitHavok_Hook::install_hook();    // disable havok / interactions
-    //OnLoad3D_Hook::install_hook();
-    //OnAddCellPerformQueueReference_Hook::install_hook();     // только при заходе в новые локи  
+    //OnLoad3D_Hook::install_hook();  
     OnPhysicalHit_Hook::install_hook();
     On_AnimEvent_Hook::install_hook();
     HiddenSpeedMult_updater_Hook::install_hook();
