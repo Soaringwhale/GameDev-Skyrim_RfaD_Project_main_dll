@@ -60,7 +60,7 @@ void ActionManager::EvaluateAndPerformActions()
                 Action* action = (*queueIt);
                 bool actionSuccess = false;
                 //logger::debug("Try action {}", action->actionOrIdle->GetFormEditorID());
-                if (action->actionOrIdle->formType.get() == FormType::Idle) {
+                if (action->actionOrIdle->formType == FormType::Idle) {
                     if (action->pairedSearchMode > Action::SEARCH_MODE::kNone) {
                         Actor* target = nullptr;
                         bhkPickData pick;

@@ -1,15 +1,17 @@
 
+#pragma warning (disable : 4100)
+
 #include "InputWatcher.h"
 #include "utils.h"
 #include "core.h"
 
 using namespace RE;
 
-BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)      //  обработка нажатий
+BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)      //  РѕР±СЂР°Р±РѕС‚РєР° РЅР°Р¶Р°С‚РёР№
 {
     if (!*evns) return RE::BSEventNotifyControl::kContinue;
 
-    for (InputEvent *e = *evns;  e;  e = e->next)        //  начинаем идти по InputEvents пока евент (е) истинен
+    for (InputEvent *e = *evns;  e;  e = e->next)        //  РЅР°С‡РёРЅР°РµРј РёРґС‚Рё РїРѕ InputEvents РїРѕРєР° РµРІРµРЅС‚ (Рµ) РёСЃС‚РёРЅРµРЅ
     {            
         switch (e->eventType.get()) {
             case INPUT_EVENT_TYPE::kButton:
@@ -52,9 +54,7 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
                     //} else if (isReleased) {
                         // ActionManager::GetSingleton()->OnKeyReleased(keyCode);
                     //}
-                }
-
-                
+                }  
         }
     }
 

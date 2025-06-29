@@ -1,12 +1,14 @@
-#pragma once
+
+#pragma warning (disable : 4189) 
 
 #include "ui.h"
 #include "utils.h"
 #include "core.h"
+#include "Events.h"
 #include "SimpleIni.h"
 
 
-RE::BSEventNotifyControl MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)  // catch menues open/close
+RE::BSEventNotifyControl events::MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)  // catch menues open/close
 {
 
     if (ev) {
@@ -21,12 +23,12 @@ RE::BSEventNotifyControl MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpe
             else             on_inventory_close();
             // event->opening ? RfadWidget::toggle_visibility(false) : RfadWidget::toggle_visibility(true);
         }
-		else if (ev->menuName == RE::HUDMenu::MENU_NAME)      {
+        else if (ev->menuName == RE::HUDMenu::MENU_NAME)      {
             ev->opening ? RfadWidget::show() : RfadWidget::hide();
-		}
-		else if (ev->menuName == RfadWidget::TRUE_HUD)        {
+        }
+        else if (ev->menuName == RfadWidget::TRUE_HUD)        {
             ev->opening ? RfadWidget::show() : RfadWidget::hide();
-		}
+        }
         else if (ev->menuName == RE::LoadingMenu::MENU_NAME)  {
             ev->opening ? RfadWidget::hide() : RfadWidget::show();
         }
@@ -56,14 +58,14 @@ RE::BSEventNotifyControl MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpe
     if (control_map) {
         auto& priorityStack = control_map->contextPriorityStack;
         if (priorityStack.empty())
-	    {
+        {
             RfadWidget::toggle_visibility(false);
         }
-	    else if (priorityStack.back() == ContextID::kGameplay || priorityStack.back() == ContextID::kFavorites || priorityStack.back() == ContextID::kConsole)
-	    {
+        else if (priorityStack.back() == ContextID::kGameplay || priorityStack.back() == ContextID::kFavorites || priorityStack.back() == ContextID::kConsole)
+        {
             RfadWidget::toggle_visibility(true);
         }
-	    else if ((priorityStack.back() == ContextID::kCursor ||
+        else if ((priorityStack.back() == ContextID::kCursor ||
                     priorityStack.back() == ContextID::kItemMenu ||
                     priorityStack.back() == ContextID::kMenuMode ||
                     priorityStack.back() == ContextID::kInventory) &&
@@ -73,11 +75,11 @@ RE::BSEventNotifyControl MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpe
                      RE::UI::GetSingleton()->IsMenuOpen(RE::ContainerMenu::MENU_NAME) ||
                      RE::UI::GetSingleton()->IsMenuOpen(RE::GiftMenu::MENU_NAME) ||
                      RE::UI::GetSingleton()->IsMenuOpen(RE::InventoryMenu::MENU_NAME))))
-	    {
+        {
             RfadWidget::toggle_visibility(false);
         }
-	    else
-	    {
+        else
+        {
             RfadWidget::toggle_visibility(false);
         }
     }
@@ -120,6 +122,7 @@ RfadWidget::RfadWidget()    // ctor
 
 void RfadWidget::register_()
 {
+    if (mys::widget_shown->value == 0) return;
     if (auto ui = RE::UI::GetSingleton()) {
         ui->Register (MENU_NAME, creator);
         LOG ("Register menu");
@@ -129,27 +132,27 @@ void RfadWidget::register_()
 
 void RfadWidget::show()
 {
+    LOG("called RfadWidget::show()");
+    if (mys::widget_shown->value == 0) return;
     if (auto message_queue = RE::UIMessageQueue::GetSingleton()) {
-        if (mys::widget_shown->value == 1.f) {
-            LOG("called RfadWidget::show()");
             message_queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
-        }
-
+            
     }
 }
 
 void RfadWidget::hide()
 {
+    LOG("called RfadWidget::hide()");
+    //if(mys::widget_shown->value > 0.f) return;
     if (auto message_queue = RE::UIMessageQueue::GetSingleton()) {
-        if (mys::widget_shown->value == 0.f) {
-            LOG("called RfadWidget::hide()");
             message_queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-        }
     }
 }
 
-void RfadWidget::toggle_visibility (const bool mode)
+void RfadWidget::toggle_visibility (bool mode)
 {
+    LOG("called RfadWidget::toggle_visibility({})", mode);
+    if (mode && mys::widget_shown->value == 0) return;
     auto ui = RE::UI::GetSingleton();
     if (!ui)  return;
     auto overlay_menu = ui->GetMenu(MENU_NAME);
@@ -157,24 +160,35 @@ void RfadWidget::toggle_visibility (const bool mode)
     overlay_menu->uiMovie->SetVisible(mode);
 }
 
-void RfadWidget::on()
+
+void toggle_numbers_widget ()   // core.h  handle helper func (F10)
 {
-    mys::widget_shown->value = 1.f;
-    show();
-    toggle_visibility(true);
+    LOG("called toggle_numbers_widget()");
+    if (mys::widget_shown->value > 0) {
+        mys::widget_shown->value = 0;
+        RfadWidget::hide();
+        RfadWidget::toggle_visibility(false);
+    }
+    else {
+        mys::widget_shown->value = 1.f;
+        RfadWidget::show();
+        RfadWidget::toggle_visibility(true);
+    }
 }
 
-void RfadWidget::off()
-{
-    mys::widget_shown->value = 0.f;
-    hide();
-    toggle_visibility(false);
-}
-
-void toggle_numbers_widget ()   // core.h
-{
-    if (mys::widget_shown->value == 1.f)  RfadWidget::off();
-    else                                  RfadWidget::on();
+void handle_numbers_widget ()   // core.h  handle helper func (update state)
+{  
+    LOG("called handle_numbers_widget()");
+    if(mys::ui->IsMenuOpen (RE::DialogueMenu::MENU_NAME) ||
+       mys::ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) return;    // don't handle in dialogues or inventory
+    if (mys::widget_shown->value == 1.f) {
+        RfadWidget::show();
+        RfadWidget::toggle_visibility(true);
+    }
+    //else {
+    //    RfadWidget::hide();
+    //    RfadWidget::toggle_visibility(false);
+    //}
 }
 
 float RfadWidget::av_total_regen_value (const RE::ActorValue av, const RE::ActorValue av_rate, const RE::ActorValue av_rate_mult)
@@ -204,7 +218,7 @@ float RfadWidget::av_total_regen_value (const RE::ActorValue av, const RE::Actor
     auto restore_value_counter = 0.f;
 
     for (auto active_effect : *active_effects)
-	{
+    {
         if (!valid_effect(active_effect)) continue;
 
         if (value_or_peakvalue_mod(active_effect)) {
@@ -241,26 +255,30 @@ float RfadWidget::av_total_regen_value (const RE::ActorValue av, const RE::Actor
     return restore_value_counter + regeneration;
 }
 
+static bool _blinker = false; 
 
 void RfadWidget::update()
 {
+    _blinker = !_blinker;  // for every 2 update
+    if (_blinker) return;
+    if (mys::widget_shown->value == 0) return;
 
     auto ui = RE::UI::GetSingleton();
     if (!ui || ui->GameIsPaused())  return;
 
     RE::GPtr<RE::IMenu> Rfad_widget = ui->GetMenu (MENU_NAME);   //
-    if (!Rfad_widget || !Rfad_widget->uiMovie)  return;																																																																															
+    if (!Rfad_widget || !Rfad_widget->uiMovie)  return;                                                                                                                                                                                                                                                                                                                            
 
     auto pl = RE::PlayerCharacter::GetSingleton();
 
-	using string = std::string;
+    using string = std::string;
 
     string hp_regen_str = std::to_string(int(av_total_regen_value(RE::ActorValue::kHealth, RE::ActorValue::kHealRate, RE::ActorValue::kHealRateMult))) + string("/s");
     string st_regen_str = std::to_string(int(av_total_regen_value(RE::ActorValue::kStamina, RE::ActorValue::kStaminaRate, RE::ActorValue::kStaminaRateMult)))+ string("/s");
     string mp_regen_str = std::to_string(int(av_total_regen_value(RE::ActorValue::kMagicka, RE::ActorValue::kMagickaRate, RE::ActorValue::kMagickaRateMult)))+ string("/s");
 
     string hp_view_str = std::to_string(int(pl->GetActorValue(RE::ActorValue::kHealth))) + string("/") 
-		               + std::to_string(int(u_get_actor_value_max(pl, RE::ActorValue::kHealth)));         
+                       + std::to_string(int(u_get_actor_value_max(pl, RE::ActorValue::kHealth)));         
     string st_view_str = std::to_string(int(pl->GetActorValue(RE::ActorValue::kStamina))) + string("/") +
                          std::to_string(int(u_get_actor_value_max(pl, RE::ActorValue::kStamina)));               // like "450/600"
     string mp_view_str = std::to_string(int(pl->GetActorValue(RE::ActorValue::kMagicka))) + string("/") +
@@ -275,8 +293,8 @@ void RfadWidget::update()
 
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setHealthText", nullptr, &health_regen, 1);     // 
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setStaminaText", nullptr, &stamina_regen, 1);
-    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setMagickaText", nullptr, &magicka_regen, 1);                 //  методы из ActionScript, вызываемые у frame1
-    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueHealthText", nullptr, &value_health, 1);              //  (т.к. у нас нет анимаций, текст это всего 1 кадр который обновляется)
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setMagickaText", nullptr, &magicka_regen, 1);                 //  РјРµС‚РѕРґС‹ РёР· ActionScript, РІС‹Р·С‹РІР°РµРјС‹Рµ Сѓ frame1
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueHealthText", nullptr, &value_health, 1);              //  (С‚.Рє. Сѓ РЅР°СЃ РЅРµС‚ Р°РЅРёРјР°С†РёР№, С‚РµРєСЃС‚ СЌС‚Рѕ РІСЃРµРіРѕ 1 РєР°РґСЂ РєРѕС‚РѕСЂС‹Р№ РѕР±РЅРѕРІР»СЏРµС‚СЃСЏ)
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueStaminaText", nullptr, &value_stamina, 1);
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueMagickaText", nullptr, &value_magicka, 1);
 
@@ -284,14 +302,14 @@ void RfadWidget::update()
 }
 
 
-void RfadWidget::apply_layout (const RE::GPtr<RE::IMenu>& Rfad_widget)      // применение перерисовки
+void RfadWidget::apply_layout (const RE::GPtr<RE::IMenu>& Rfad_widget)      // РїСЂРёРјРµРЅРµРЅРёРµ РїРµСЂРµСЂРёСЃРѕРІРєРё
 {
 
     if (!Rfad_widget || !Rfad_widget->uiMovie) return;
 
     auto settings = UISettings::get_singleton();
 
-	const RE::GFxValue scale = settings.scale();
+    const RE::GFxValue scale = settings.scale();
 
     const RE::GFxValue pos_regen_hp_x = settings.get_hp_regen_pos_x();
     const RE::GFxValue pos_regen_hp_y = settings.get_hp_regen_pos_y();
@@ -334,6 +352,7 @@ void RfadWidget::AdvanceMovie (const float interval, const uint32_t current_time
 
 void UISettings::load_From_INI()  // using SimpleIni.h
 {
+        LOG("called load_From_INI()");
         constexpr auto path_to_ini = L"Data/MCM/Settings/Reflyem - Widget.ini";
         constexpr auto path_to_ini_default = L"Data/interface/RfadWidgetSettings/settings.ini";   // my
 

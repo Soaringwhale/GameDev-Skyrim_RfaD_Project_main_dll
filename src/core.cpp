@@ -1,5 +1,6 @@
 
-#pragma once
+#pragma warning (disable : 4244)
+#pragma warning (disable : 4189)
 
 #include "core.h"
 #include "utils.h"
@@ -16,6 +17,8 @@
 #else
     #define SetConsoleTitle SetConsoleTitleA        
 #endif
+
+#define KINSTANT  RE::MagicSystem::CastingSource::kInstant  // for castSpellImmediate
 
 using std::ios;
 
@@ -90,7 +93,7 @@ void mys::init_globs()
     dodge_KD_spl    = my::handler->LookupForm<RE::SpellItem>(0x6AA965, "Requiem.esp");
     speed_cast_glob = my::handler->LookupForm<RE::TESGlobal>(0xBA02F2, "RfaD SSE - Awaken.esp");
     gameProcessed   = my::handler->LookupForm<RE::TESGlobal>(0x7E992,  "RfaD SSE - Awaken.esp");
-	widget_shown    = my::handler->LookupForm<RE::TESGlobal>(0x753BC6,  "RfaD SSE - Awaken.esp");
+    widget_shown    = my::handler->LookupForm<RE::TESGlobal>(0x753BC6,  "RfaD SSE - Awaken.esp");
     
     reserved_MP = 0.f;
     ms_compensator = 0.f;
@@ -141,7 +144,7 @@ namespace x_desc
 {
     void parseFileLine (std::string line)
     {
-        if (line.empty() || line[0] != '0') return;
+        if (line.empty() || line[0] != '0') return;   // read only "0x..." strings
 
         // delete spaces at the end
         line.erase(std::find_if(line.rbegin(), line.rend(), [](int i){return !std::isspace(i);}).base(), line.end());
@@ -193,44 +196,12 @@ void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item)
     //LOG("called on_item_card_upd()");
     if (x_descriptions.contains(item->formID))
     {
-        if (mys::xdescr_on)
+        if (mys::xdescr_on || item->GetFormType() == RE::FormType::Misc)
         {
            auto newDescrGfx = RE::GFxValue(x_descriptions[item->formID].c_str());          // получаем описание для предмета (из файла)
            itemCard->obj.SetMember(ItemCardFixer::descriptionVar, newDescrGfx);            // назначаем в поле "DF_description" карточки это описание
         }
     }
-}
-
-float getBlockerDur (RE::Actor *pl)  // not using now, nemesis handles anims cancel
-{ 
-    auto weap = u_get_weapon(pl, false);
-    if (!weap) return 0;
-
-    float dur = 0.32f;
-
-    auto atkSpeed = pl->GetActorValue(RE::ActorValue::kWeaponSpeedMult);    
-    auto weight = weap->weight;                                               
-    dur += (weight * 0.008f);       // прямая пропорция, чем выше вес, тем дольше длительность блокера
-    dur -= ((atkSpeed - 1)*0.32f);  // обратная пропорция, чем выше скорость тем ниже длительность блокера
-    
-    bool twohand = (weap->GetWeaponType() < RE::WEAPON_TYPE(5)) ? 0 : 1;   // 1H / 2H
-    if (twohand) dur *= 1.5f;
-
-    //auto state = pl->actorState1;                    // movement dir
-    //if      (state.movingForward > 0) dur *= 2.2f;
-    //else if (state.movingBack    > 0) dur *= 2.2f;
-    //else if (state.movingLeft > 0 || state.movingRight > 0) dur *= 2.2f;
-
-    auto proc = pl->currentProcess;
-    if (proc && proc->high) {
-        if (proc->high->attackData.get()) {
-            if (proc->high->attackData.get()->data.attackType != my::pwAtkTypeStanding.p) {    // any directional pwAtk
-                dur *= 1.5f;
-            }
-        }
-    }
-    //RE::DebugNotification(std::to_string(dur).c_str());   //  UNCOMMENT TO SEE DUR
-    return dur;
 }
 
 void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool is_held) 
@@ -302,7 +273,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
     {
         if (player->IsInCombat() && player->HasPerk(my::heavy_25_perk.p) && !player->HasMagicEffect(my::adrenalineKD.p)) {
               float st_restore = 0.25f * u_get_actor_value_max (player, RE::ActorValue::kStamina);
-			  if (player->HasPerk(my::heavy_50_perk.p)) st_restore *= 1.25f;
+              if (player->HasPerk(my::heavy_50_perk.p)) st_restore *= 1.25f;
               if (is_up)  //  instant tap
               {
                   u_cast_on_self (my::adrenaline_tap.p, player);
@@ -312,7 +283,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
               if (hold_time > 0.8f)  //  hold
               {
                   u_cast_on_self(my::adrenaline_hold.p, player);
-				  player->RestoreActorValue (RE::ACTOR_VALUE_MODIFIERS::kDamage, RE::ActorValue::kStamina, st_restore);
+                  player->RestoreActorValue (RE::ACTOR_VALUE_MODIFIERS::kDamage, RE::ActorValue::kStamina, st_restore);
                   RE::DebugNotification(my::adrenalineMax_text.c_str());
               }
         }
@@ -335,13 +306,13 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
               {
                   my::vamp_C_holdState = 1;
                   u_playSound(player, my::vampireHeartBeat.p, 1.0f);
-                  player->InstantiateHitShader(my::bloodBubbles_FX.p, 1.5f, player);  // apply shader on actor
+                  player->ApplyEffectShader(my::bloodBubbles_FX.p, 1.5f, player);  // apply shader on actor
                   return;
               }
               if (hold_time > 1.6f && my::vamp_C_holdState < 2)  // stage 2 hold
               {
                   my::vamp_C_holdState = 2;
-                  player->InstantiateHitShader(my::bloodFire_FX.p, 1.5f, player);
+                  player->ApplyEffectShader(my::bloodFire_FX.p, 1.5f, player);
                   return;
               }
               if (hold_time > 2.6f && my::vamp_C_holdState < 3)  // stage 3 hold
@@ -429,7 +400,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
         if (player->HasPerk(my::nb_perk_1.p))
         {
               if (hold_time > 0.18f && nb_hold_state < 1) {
-                  player->InstantiateHitArt(my::nb_blynk_fx.p, 1.4f, player, false, true);
+                  player->ApplyArtObject(my::nb_blynk_fx.p, 1.4f, player, false, true);
                   nb_hold_state = 2;
               } else if (hold_time > 0.3f && nb_hold_state < 3) {
                   if(!player->HasMagicEffect(my::nb_blynk_kd.p)) u_cast_on_self(my::nb_blynk_hold.p, player);
@@ -443,7 +414,6 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
                   nb_hold_state = 0;
               }
         } 
-        
     }
 
     if (keyCode == keyCodes.at(8))  // cultist
@@ -468,10 +438,12 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
         }
     }
     else if (keyCode == 68) {                //  F10
-        if (is_up) toggle_numbers_widget();
+        if (is_up) {
+            toggle_numbers_widget();
+        }
     }
     else if (keyCode == 87)                  //  F11
-    {
+    { 
         if (xdescr_state == 0) {
               xdescr_on = !xdescr_on;  // switch item descriptions mode
               xdescr_state = 1;
@@ -479,8 +451,29 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
               u_SendInventoryUpdateMessage(player, nullptr);
         }
     }
+    else if (keyCode == 88)                  //  F12
+    { 
+        if (is_up) {
+            
+            player->DrawWeaponMagicHands(false);
+            if (!my::meditateState) {
+                RE::DebugNotification("Вы погружаетесь в свои мысли..");
+                my::meditateState = true;
+                RE::PlayerCamera::GetSingleton()->ForceThirdPerson();
+                u_cast_on_self(my::meditationFFself.p, player);
+                player->AddSpell(my::meditationSpell.p);
+            }
+            else
+            {
+                //u_jump(player);
+                player->NotifyAnimationGraph("IdleSitCrossLeggedExit");
+                player->NotifyAnimationGraph("IdleChairExitStart");
+                player->RemoveSpell(my::meditationSpell.p);
+                my::meditateState = false;
+            }
+        }
+    }
  }
-
 
 void apply_levelUp_bonuses()
 {
@@ -602,9 +595,9 @@ void sf_manaReserve_buff_cast(uint16_t buff_index)
 
         if (currMana < 100) return;
 
-        if      (buff_index == 1 && baseMana < 170)  return;        // speed
-        else if (buff_index == 2 && baseMana < 180)  return;        // penetr
-        else if (buff_index == 3 && baseMana < 170)  return;        // armor
+        if      (buff_index == 1 && baseMana < 180)  return;        // speed
+        else if (buff_index == 2 && baseMana < 190)  return;        // penetr
+        else if (buff_index == 3 && baseMana < 190)  return;        // armor
         else if (buff_index == 4 && baseMana < 180)  return;        // reflect
         else if (buff_index == 5 && baseMana < 170)  return;        // absorb
         else if (buff_index == 6 && baseMana < 170)  return;        // stamina
@@ -788,12 +781,12 @@ float reflectedArrow_dmg(float dealt_dmg)
         float armorFactorMult = (1 - penetratedArmor / 1000);  // for ex armor after penetration is 200, so mult will be 0.8
         if (armorFactorMult < 0.2f) armorFactorMult = 0.2f;
         if (armorFactorMult > 1.0f) armorFactorMult = 1.0f;
-        float arrowRes = mys::player->GetActorValue(RE::ActorValue::kSpeechcraftSkillAdvance);
+        float arrowRes = mys::player->GetActorValue(RE::ActorValue::kSpeechcraftSkillAdvance); // dealt_dmg already includes arrowResFactor, so we compensate it's effect and scale dmg
         //LOG("dealt_dmg_param - {}, weapDmg - {}, powerMod - {}, penetr - {}, armorFactorMult - {}", dealt_dmg, weapDmg, avPowerMod, penetr, armorFactorMult);
 
         //LOG("finished reflectedArrow_dmg()");
-
-        return ((dealt_dmg*0.7f + weapDmg*1.5f) * (1 + avPowerMod/100)) * armorFactorMult * (1 - arrowRes/200) * u_req_inc_damage();
+        float grim = u_is_equipped(mys::player, my::grimoireAssassin.p) ? 0.8f : 1.f;
+        return ((dealt_dmg + weapDmg*1.5f) * (1 + avPowerMod/100)) * armorFactorMult * (1 + arrowRes/200) * grim * u_req_inc_damage(); 
 }
 
 
@@ -802,7 +795,7 @@ float manaShield (RE::Actor* target, float damage, RE::TESDataHandler* handler, 
         LOG("called manaShield()");
 
         float absorbPercent = sf ? 0.25f : 0.2f;  // absorb percent
-        float manaPerDmg = sf ? 3.f : 4.f;        // Magicka cost per 1 phys damage         
+        float manaPerDmg = sf ? 2.5f : 3.f;       // Magicka cost per 1 phys damage         
 
         float currentMana = target->GetActorValue(RE::ActorValue::kMagicka);
         float dmgToHP = 0;
@@ -816,7 +809,7 @@ float manaShield (RE::Actor* target, float damage, RE::TESDataHandler* handler, 
             manaSpent = dmgAbsorbed * manaPerDmg;
             target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, -manaSpent);
             RE::SpellItem* breakSpell = handler->LookupForm<RE::SpellItem>(0x57C91C, "RfaD SSE - Awaken.esp");  // explosion and dispel
-            target->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(breakSpell, false, nullptr, 1.f, false, 0.f, target);
+            target->GetMagicCaster(KINSTANT)->CastSpellImmediate(breakSpell, false, nullptr, 1.f, false, 0.f, target);
             return dmgToHP;
         }
 
@@ -927,7 +920,7 @@ void proc_injure (RE::Actor* agressor, RE::Actor* target, RE::HitData *hit_data,
         dmg *= (injure_dmg_mult(target) * 0.7f);
 
         u_playSound(target, my::slashSound.p, 2.f);
-        agressor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(my::injureSpell.p, false, target, 1.f, false, dmg, agressor);        // onHit
+        agressor->GetMagicCaster(KINSTANT)->CastSpellImmediate(my::injureSpell.p, false, target, 1.f, false, dmg, agressor);     // onHit
     }
 }
 
@@ -1015,15 +1008,15 @@ void print_dmg_to_console (RE::Actor* agr, RE::Actor* target, RE::TESObjectWEAP*
         // прогоняем 1.f через ентри перков агрессора, что-бы узнать суммарные мульты. При этом проверяются кондишены, и мы получаем реальный мульт, там где кондишены не прошли игнорируется.
         RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, agr, weap, std::addressof(total_player_overcap));
         RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, weap, target, std::addressof(total_atkDmgMult));
-		//RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModTargetDamageResistance, agr, weap, target, std::addressof(unArmor));
-		if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, weap, target, std::addressof(total_pwAtkDmgMult));
+        //RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModTargetDamageResistance, agr, weap, target, std::addressof(unArmor));
+        if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, weap, target, std::addressof(total_pwAtkDmgMult));
 
         if (weap->formID == my::vanillaUnarmed.p->formID)
         {
             //s += "armorAfterUnarmedPenetr - " + std::to_string(int(unArmor)) + "; ";
         }
-		else
-		{
+        else
+        {
            if (!isPwAtk) {
                penetr *= 0.5f;
                s += "(/2); ";
@@ -1032,7 +1025,7 @@ void print_dmg_to_console (RE::Actor* agr, RE::Actor* target, RE::TESObjectWEAP*
 
            float remainedArmor = armor * (100 - penetr) / 100;
            s += "armorAfterPenetr - " + std::to_string(int(remainedArmor)) + "; ";
-		}
+        }
     
         s += "perks_dmgMult - " + u_trimmed_str(total_atkDmgMult) + ", ";
         if (isPwAtk) s += "pwAtkDmgMult - " + u_trimmed_str(total_pwAtkDmgMult) + ",  ";
@@ -1061,9 +1054,9 @@ void print_target_physResists (RE::Actor* agr, RE::Actor* target, RE::TESObjectW
 
 //  [fires at the beginning of attack process, but cannot interrupt attack]
 //  [hit_data is a copy here, if need change result dmg, change a float damage var below]
-float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)   
+float on_physical_hit (RE::Actor* target, RE::HitData hit_data)   
 {
-    LOG("called allOnHitEffects()");
+    LOG("called on_physical_hit()");
 
     float damage = hit_data.totalDamage;        //  damage after resist
     bool isPowerAtk = hit_data.flags.any(RE::HitData::Flag::kPowerAttack);  // any() checks bit flag
@@ -1079,7 +1072,7 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)
     auto weapRef  = agressor->GetEquippedEntryData(false);  // weap ref for extraData etc.
     auto leftweapRef = agressor->GetEquippedEntryData(true);
 
-	// hit_data.attackData.get()->data.staminaMult;   STAMINA MULT
+    // hit_data.attackData.get()->data.staminaMult;   STAMINA MULT
 
     if (!target || !agressor) return damage;
     //LOG("allOnHitEffects___1");
@@ -1121,9 +1114,9 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)
         return damage;
     }
 
-    if (target->IsPlayerRef())
+    if (target->IsPlayerRef())    //  [target = player]
     {
-          LOG("allOnHitEffects___target_was_player");
+          LOG("on_physical_hit___target_was_player");
 
           handle_stagger (target, weap, isPowerAtk);
 
@@ -1156,7 +1149,7 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)
                   u_cast_on_self(my::breakBowSpl.p, target);
               }
           }
-          if (target->HasPerk(my::temp_1.p)) damage *= 1.15;  // || target->HasPerk(my::temp_2.p))  // temp
+          if (target->HasPerk(my::temp_1.p)) damage *= 1.10f;  // || target->HasPerk(my::temp_2.p))  // temp
           if (target->HasMagicEffect(my::manaShield_2.p)) {
               manaShield_dmg_delta = manaShield(target, damage, my::handler, false);
           } 
@@ -1172,60 +1165,78 @@ float allOnHitEffects (RE::Actor* target, RE::HitData hit_data)
 
           print_dmg_to_console (agressor, target, weap, damage-manaShield_dmg_delta-convert_dmg_delta, isPowerAtk, isBlocked);
 
-    }// end targer->player only
-    else if (agressor->IsPlayerRef())
+    }
+    else    // [targer = non player]
     {
-
-        LOG("allOnHitEffects___agressor_was_player");
-        
-        //print_target_physResists (agressor, target, weap, damage - manaShield_dmg_delta - convert_dmg_delta);
-
-        target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -damage * 0.3f);   // dmg stamina
-
-        if (agressor->HasPerk(my::snowElf_anabioz.p)) {  
-              convert_dmg_delta += convert_physDmg_toFrost(target, &hit_data, 0.2f);  // anabioz
-        }
-        if ((weapRef && weapRef->IsPoisoned()) || (leftweapRef && leftweapRef->IsPoisoned()))    // oil
-        {  
-              gameplay::oil_proc (agressor, target, &hit_data, damage);
-        }
-        float sf_manaDrain = sf_get_manaDrain();                    //  SF
-        if (sf_manaDrain > 0)    {
-            mys::player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, -sf_manaDrain);
-        }
-        if (agressor->HasSpell(my::redguardFF.p)) {
-            u_cast_on_self(my::redguardBuffDmg.p, agressor);          // redguard onHit dmg
-        }
-        if (agressor->HasSpell(my::vampirism.p)) {                    // vampire drain onHit
-            if (target->HasMagicEffect(my::bloodBrandNovaEf.p) || target->HasMagicEffect(my::bloodBrandEf.p)) {
-                gameplay::vamp_drain_onHit(agressor, target);
+        if (target->HasKeyword(my::playersAutomaton.p)) {
+            auto hpPercent = u_get_av_percent(target, RE::ActorValue::kHealth);
+            if (hpPercent < 0.75f && u_get_item_count(target, my::autoRepairKit.p->formID) > 0) {  // mech auto-heal kit
+                u_cast_on_self (my::autoHealFromKit.p, target);
+                RE::DebugNotification("Авто-ремонт...");
+                target->RemoveItem(my::autoRepairKit.p, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
             }
         }
-        if (mys::player->HasMagicEffect(my::nb_openMode.p)) {         // NB   
-            my::nb_hitCounter.p->value += 1;
-        }
-        if (my::nb_magicBlade.p->value == 1.f) {                      // NB magicBlade
-            if (u_get_av_percent(agressor, RE::ActorValue::kMagicka) > 0.2f) {
-				float mp = u_get_actor_value_max(mys::player, RE::ActorValue::kMagicka) * 0.06f;
-                mys::player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, -mp);
-                float magRes = target->GetActorValue(RE::ActorValue::kResistMagic);
-                float mult = u_is_power_attacking(agressor) ? 7.f : 3.5f; 
-                float dmg = (mp * mult) * (1 - magRes / 100.f);
-                target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
+        if (agressor->IsPlayerRef())   //  [player hits npc]
+        {
+            LOG("on_physical_hit___agressor_was_player");
+            
+            //print_target_physResists (agressor, target, weap, damage - manaShield_dmg_delta - convert_dmg_delta);
+            
+            target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -damage * 0.3f);   // dmg stamina
+            
+            if (agressor->HasPerk(my::snowElf_anabioz.p)) {  
+                  convert_dmg_delta += convert_physDmg_toFrost(target, &hit_data, 0.2f);  // anabioz
             }
-        }
-        //  fister knuckles
-        if (auto knuckles = eq_knuckles(agressor)) {
-            if (knuckles->HasKeyword(my::knuckles_injuring.p)) {
-                  proc_injure (agressor, target, &hit_data, isPowerAtk, true);
+            if ((weapRef && weapRef->IsPoisoned()) || (leftweapRef && leftweapRef->IsPoisoned()))    // oil
+            {  
+                  gameplay::oil_proc (agressor, target, &hit_data, damage);
             }
-            if (hit_data.attackData && hit_data.attackData.get()) {
-                bool isLeft = hit_data.attackData.get()->IsLeftAttack();
-                gameplay::knuckles_hit(agressor, target, knuckles, damage, isPowerAtk, isLeft);
+            float sf_manaDrain = sf_get_manaDrain();                    //  SF
+            if (sf_manaDrain > 0)    {
+                mys::player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, -sf_manaDrain);
+            }
+            if (agressor->HasSpell(my::redguardFF.p)) {
+                u_cast_on_self(my::redguardBuffDmg.p, agressor);          // redguard onHit dmg
+            }
+            if (agressor->HasSpell(my::vampirism.p)) {                    // vampire drain onHit
+                if (target->HasMagicEffect(my::bloodBrandNovaEf.p) || target->HasMagicEffect(my::bloodBrandEf.p)) {
+                    gameplay::vamp_drain_onHit(agressor, target);
+                }
+            }
+            if (mys::player->HasMagicEffect(my::nb_openMode.p)) {         // NB   
+                my::nb_hitCounter.p->value += 1;
+            }
+            if (my::nb_magicBlade.p->value == 1.f) {                      // NB magicBlade
+                if (u_get_av_percent(agressor, RE::ActorValue::kMagicka) > 0.2f) {
+                    float mp = u_get_actor_value_max(mys::player, RE::ActorValue::kMagicka) * 0.06f;
+                    mys::player->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, -mp);
+                    float magRes = target->GetActorValue(RE::ActorValue::kResistMagic);
+                    float mult = u_is_power_attacking(agressor) ? 7.f : 3.5f; 
+                    float dmg = (mp * mult) * (1 - magRes / 100.f);
+                    target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
+                }
+            }
+            if (auto knuckles = eq_knuckles(agressor)) {                      //  fister knuckles
+                if (knuckles->HasKeyword(my::knuckles_injuring.p)) {
+                      proc_injure (agressor, target, &hit_data, isPowerAtk, true);
+                }
+                if (hit_data.attackData && hit_data.attackData.get()) {
+                    bool isLeft = hit_data.attackData.get()->IsLeftAttack();
+                    gameplay::knuckles_hit(agressor, target, knuckles, damage, isPowerAtk, isLeft);
+                }
+            }
+            if (u_is_equipped (agressor, my::grimoireMagDmg.p)) {    // grimoire of deal magDmg
+                
+                float magDmg = (damage*0.15f*agressor->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance)*0.1f);
+                agressor->GetMagicCaster(KINSTANT)->CastSpellImmediate(my::magDmgOnHit.p, false, target, 1.f, false, magDmg, agressor);
+                float curseAmount = (weap->GetWeaponType() < RE::WEAPON_TYPE(5)) ? 2.f : 4.f;
+                if (isPowerAtk) curseAmount *= 1.5f;
+                gameplay::increase_arcane_curse(agressor, curseAmount);
+                damage *= 0.85f;
             }
         }
     }
-    
+
     if (weap->HasKeyword(my::sword_1h.p) && agressor->HasPerk(my::swordFocus1.p) && !isBlocked && !target->HasMagicEffect(my::injureEff.p) && !target->HasKeyword(my::actorDwarven.p)) {
         proc_injure (agressor, target, &hit_data, isPowerAtk);
     }
@@ -1274,7 +1285,7 @@ inline void handle_moveSpeed_compensation()                   //  depents on arm
 {
     LOG("called handle_moveSpeed_compensation()");
 
-    if (!mys::hasHeavyArmor) {mys::ms_compensator = 0; return; }     //  only for heavy armor = on
+    if (!mys::hasHeavyArmor && !u_worn_has_keyword(mys::player, my::weapTypeBow.p)) {mys::ms_compensator = 0; return; }
     float speedMult  = mys::player->GetActorValue(RE::ActorValue::kSpeedMult);
     float smooth = 0.f;
     if (speedMult < 101.f) return;
@@ -1286,6 +1297,8 @@ inline void handle_moveSpeed_compensation()                   //  depents on arm
     // auto total_inv_weight = mys::player->GetActorValue(RE::ActorValue::kInventoryWeight);        //  for total inventory weight
 
     mys::ms_compensator = ((eq_weight*2.f)/1000 * (1+(speedMult-100)/150)) - smooth;    // 70 weight and 140 ms will do  ->  (0,14 * 1,26) ≈ 0,18 
+
+    if(u_worn_has_keyword(mys::player, my::weapTypeBow.p)) mys::ms_compensator *= 2.f;
 
 }
 
@@ -1314,8 +1327,7 @@ void player_anim_handle (RE::BSTEventSink<RE::BSAnimationGraphEvent>   *this_,
     else if (animation == Utils_anim_namespace::AnimationEvent::kBowZoomStart) {    
            if (mys::player->HasPerk(my::bowSlowTimePerk.p)) {
                 float maxst = u_get_actor_value_max(mys::player, RE::ActorValue::kStamina);
-                mys::player->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)
-                    ->CastSpellImmediate(my::zoomStress.p, false, nullptr, 1.f, false, 22.f+maxst*0.11f, mys::player);
+                mys::player->GetMagicCaster(KINSTANT)->CastSpellImmediate(my::zoomStress.p, false, nullptr, 1.f, false, 22.f+maxst*0.11f, mys::player);
            } 
     } 
     else if (animation == Utils_anim_namespace::AnimationEvent::kBowRelease  ||
@@ -1333,31 +1345,31 @@ void player_anim_handle (RE::BSTEventSink<RE::BSAnimationGraphEvent>   *this_,
     //else if (animation == Utils_anim_namespace::AnimationEvent::kAttackStop) {
     //       u_cast_on_self(my::stressDispel, mys::player);
     //}
-	// 
-	// "FootSprintLeft" , "FootSprintRight" - sprint animations
+    // 
+    // "FootSprintLeft" , "FootSprintRight" - sprint animations
 }
 
 
 bool is_const (RE::EffectSetting* baseEff) {
     return  baseEff->data.castingType == RE::MagicSystem::CastingType::kConstantEffect;
-
 }
+bool shout (RE::ActorValue av) {return av == RE::ActorValue::kShoutRecoveryMult;}
 
 void handle_capValues_onAdjustEff (RE::Actor* actor, RE::ActorValue av, float min_cap, float max_cap, RE::SpellItem *regulator, RE::ActiveEffect *eff)
 {
     LOG("called handle_capValues_onAdjustEff() for {}", regulator->GetName()); 
 
-    //shoutrecoverymult works inverted, 0.2 magn will be -0.2 real
-    float magn = (av != RE::ActorValue::kShoutRecoveryMult) ? eff->magnitude : -eff->magnitude;
+    //shoutrecoverymult works inverted, 0.2 magn will be -0.2 real, and detrimental will increase val
+    float magn = !shout(av) ? eff->magnitude : -eff->magnitude;
     float av_val = actor->GetActorValue(av);
     float avValPlusMagn  = av_val + magn;
     float avValMinusMagn = av_val - magn;
     auto baseEff = eff->effect->baseEffect;
     bool regChanged = false;
 
-    if (baseEff->IsDetrimental())  // detrimental = check min cap
+    if (baseEff->IsDetrimental())  // detrimental = check min cap.  detrimental shout (debuffs) won't handle at all
     {
-        if (av_val <= min_cap) eff->magnitude = 0;
+        if (av_val <= min_cap && !shout(av)) eff->magnitude = 0;
         else if (avValMinusMagn < min_cap)
         {
             float diff = min_cap - avValMinusMagn;
@@ -1580,7 +1592,7 @@ void log_mag_damage (RE::ActiveEffect *eff, RE::Actor *target)
          magn *= (1 - shoutRes / 100.f);
     }
 
-    s += "MagRes - " + std::to_string(int(magRes)) + "; ";
+    if (!pure) s += "MagRes - " + std::to_string(int(magRes)) + "; ";
     
     if (!pure) {
          if (magRes > 75.f) magRes = 75.f;
@@ -1648,6 +1660,64 @@ void handle_quen_4mag (RE::Actor *target, RE::ActiveEffect *eff)
     eff->duration = 0;
 }
 
+void mech_msgBox_callback (unsigned int result) {        
+   // if (result == 0) ... // no logic now
+}
+
+void show_mech_status (RE::Actor *mob)
+{
+    LOG("called show_mech_status()");
+    std::string text = "Здоровье: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kHealth))) + "/";
+    text += std::to_string(int(u_get_actor_value_max(mob, RE::ActorValue::kHealth))) + "\n";
+    text += "Броня: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kDamageResist))) + "\n";
+    text += "Сопротивление магии: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kResistMagic))) + "\n";
+    text += "Огню/холоду/молнии: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kResistFire))) + "/";
+    text += std::to_string(int(mob->GetActorValue(RE::ActorValue::kResistFrost))) + "/";
+    text += std::to_string(int(mob->GetActorValue(RE::ActorValue::kResistShock))) + "\n";
+    auto weap = u_get_weapon (mob, false) ? u_get_weapon (mob, false) : u_get_weapon (mob, true);
+    if (weap) {
+        if (weap->IsBow() || weap->IsCrossbow()) {
+            text += "Базовый урон: " + std::to_string(weap->attackDamage) + "\n";        // тут умножать на что-то, мб на мульт индиферента и тд
+            //text += "Пробивание: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kMarksmanModifier)))+"\n";
+        } 
+        //else  // melee
+        //{  
+        //    text += "Базовый урон: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kMeleeDamage)))+"\n";
+        //    if (weap->GetWeaponType() < RE::WEAPON_TYPE(5))   // 1H
+        //    {
+        //         text += "Пробивание: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kOneHandedModifier)))+"\n";  // 1H
+        //    }
+        //    else text += "Пробивание: " + std::to_string(int(mob->GetActorValue(RE::ActorValue::kTwoHandedModifier)))+"\n";  // 2H
+        //}
+    }
+    text += "МОДИФИКАЦИИ:\n";
+    auto upgrades = u_get_inv_items_by_keyword (mob, "refrain_mech_upgrade");
+    for (const auto& up : upgrades) {
+        text += std::string(up->GetName()) + "\n";
+    }
+    std::vector<std::string> buttons = { "OK" };
+    u_show_message_box2 (text, buttons, &mech_msgBox_callback);
+}
+
+float get_physDmg_magEffect_mult (RE::ActiveEffect *eff, RE::Actor *agressor, RE::Actor *target)   // mag effects that imitates phys dmg
+{
+    LOG("called get_physDmg_magEffect_mult()");
+    float mult = 1.f;
+    float armor = target->GetActorValue (RE::ActorValue::kDamageResist);
+    float penetr = agressor ? agressor->GetActorValue (RE::ActorValue::kBlockSkillAdvance) : 30.f;     //
+    if (penetr > 80.f) penetr = 80.f;
+    if (penetr < 0.f) penetr = 0.f;
+    armor *= (1-(penetr*0.01f));
+    if (armor > 800.f) armor = 800.f;
+    mult *= ((1000 - armor)*0.001f);
+
+    if (auto mItem = eff->spell; mItem->As<RE::EnchantmentItem>()) {
+        float margres = target->GetActorValue (RE::ActorValue::kResistMagic);
+        mult /= (1-(margres*0.01f));                                            // if ench ingore magres
+    }
+    return mult;
+}
+
 void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
 {
        if (!eff || !eff->effect || !eff->effect->baseEffect) return;
@@ -1658,7 +1728,7 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
         RE::Actor* target = skyrim_cast<RE::Actor*>(eff->target);   // getTargetActor() doesn't work, we must skyrim_cast from RE::Magictarget
         if (!target) return;
 
-		// custom onHit self-chants magnitude handle
+        // onHit custom self-chants handle
         if (auto mItem = eff->spell) {
             if (mItem->GetDelivery() == RE::MagicSystem::Delivery::kTouch) {
                 if (auto sourceEnch = mItem->As<RE::EnchantmentItem>()) {
@@ -1667,7 +1737,7 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
                         auto extraEnchL = u_get_actors_weap_extra_ench(caster, true);
                         if ((extraEnchR && extraEnchR->formID == sourceEnch->formID) ||
                             (extraEnchL && extraEnchL->formID == sourceEnch->formID)) {
-                               if (!u_is_power_attacking(caster)) eff->magnitude *= 0.5;
+                               if (!u_is_power_attacking(caster)) eff->magnitude *= 0.5f;
                         }
                     }
                 }
@@ -1719,7 +1789,6 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
                  eff->duration  *= 0.5f;
               }
         }
-
         if (baseEff->IsDetrimental())
         {
               if (target->HasMagicEffect(my::quen_barrier.p)) {              // quen for all
@@ -1732,15 +1801,19 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
               {
                   if (baseEff->data.primaryAV == RE::ActorValue::kHealth) {
                       log_mag_damage (eff, target); 
+                      if (u_is_equipped(target, my::grimoireConvert.p)) {
+                          gameplay::increase_arcane_curse(target, eff->magnitude*0.008);
+                          eff->magnitude *= 0.85f;
+                      }
                   }
-              }
-              else {
-                  if (target->GetActorValue(RE::ActorValue::kMood) != 1.f) gameplay::check_bestiary(target);
               }
               //else   // TEMP - see all detrimental effects, w/o handle perks entries
               //{
               //    LOG("detrimental_eff(), eff name - {}, magn - {}, dur - {}", eff->GetBaseObject()->fullName, eff->magnitude, eff->duration);
               ///}
+        }
+        else{
+            if (!target->IsPlayerRef()) gameplay::check_bestiary(target);
         }
         
         if (baseEff->HasKeyword(my::dll_check_KW.p))
@@ -1749,15 +1822,22 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
               {            
                  my::instantAbIndex = eff->magnitude;
                  if (my::instantAbIndex == 0) {
-                     u_MessageBox::MyMessageBox::Show(my::msgBoxDodge.p, &msgBoxChoiceCallback);  //   show MessageBox to choose Dodge key
+                     u_show_message_box(my::msgBoxDodge.p, &msgBoxChoiceCallback);  //   show MessageBox to choose Dodge key
                  }
                  else {
-                     u_MessageBox::MyMessageBox::Show(my::msgBoxAbils.p, &msgBoxChoiceCallback);  //   show MessageBox to choose Ability key
+                     u_show_message_box(my::msgBoxAbils.p, &msgBoxChoiceCallback);  //   show MessageBox to choose Ability key
                  }
               }
-              if (baseEff->HasKeyword (my::snowElfEnchKW.p))  snowElf_applyChant();            // snowElf chant        
-              if (baseEff->HasKeyword (my::sf_effect_KW.p))   my::sf_handle(eff, baseEff);     // sf
-              if (baseEff->HasKeyword (my::longstride_KW.p))  mys::dodge_timer = 40.f;         // longstride
+              if (baseEff->formID == my::showMechStatus.p->formID) show_mech_status(target);
+              if (baseEff->HasKeyword (my::snowElfEnchKW.p))  snowElf_applyChant();          // snowElf chant        
+              if (baseEff->HasKeyword (my::sf_effect_KW.p))   my::sf_handle(eff, baseEff);   // sf
+              if (baseEff->HasKeyword (my::longstride_KW.p))  mys::dodge_timer = 40.f;       // longstride
+
+
+              if (baseEff->HasKeyword(my::physDamageEffect.p)){
+                  auto caster = eff->caster.get().get();
+                  eff->magnitude *= get_physDmg_magEffect_mult(eff, caster, target);  // physical mag effects
+              }
                  
               // half-stack debuff system
 
@@ -1805,7 +1885,7 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
 void on_valueMod_Effect_Finish (RE::ValueModifierEffect* modEff)
 {
     if (!modEff || !modEff->effect || !modEff->effect->baseEffect) return;
-
+    //LOG("called on_valueMod_Effect_Finish()");
     if (modEff->actorValue == RE::ActorValue::kSpeedMult)  // && modEff->effect->baseEffect->GetArchetype() == RE::EffectSetting::Archetype::kPeakValueModifier
     {
        RE::Actor* target = skyrim_cast<RE::Actor*>(modEff->target);
@@ -1829,6 +1909,52 @@ void _set_proj_collision_layer (RE::Projectile* proj, RE::Actor *reflector)
 }
 
 //-----------------------------------------------------------------------------------------------
+
+
+void fill_launchData (RE::Projectile::LaunchData &data, RE::BGSProjectile* projBase, RE::Projectile::LaunchData* srcData = nullptr, RE::TESObjectREFR *shooter = nullptr,
+                      RE::SpellItem* spell = nullptr)
+{
+    LOG("called fill_launchData()");
+    data.projectileBase = projBase;
+    data.contactNormal = srcData ? srcData->contactNormal : RE::NiPoint3();      // в этой фнк хорошо бы сделать Actor* параметр и у него брать локу, комбат контролер и тд
+    data.desiredTarget = srcData ? srcData->desiredTarget : nullptr;
+    data.shooter = srcData ? srcData->shooter : shooter;
+    data.spell = srcData ? srcData->spell : spell;
+    data.combatController = srcData ? srcData->combatController : nullptr;
+    data.origin = srcData ? srcData->origin : RE::NiPoint3();
+    data.angleZ = srcData ? srcData->angleZ : 1.f;
+    data.angleX = srcData ? srcData->angleX : 1.f;                //  надо логнуть какой угол дефолтный у прожектайлов вперед
+    data.parentCell = srcData ? srcData->parentCell: nullptr;
+    data.scale = srcData ? srcData->scale : 1.f;
+    data.area = srcData ? srcData->area : 1.f;
+    data.castingSource = srcData ? srcData->castingSource : RE::MagicSystem::CastingSource::kOther;
+    data.autoAim = 0;
+    data.enchantItem = nullptr;
+    data.poison = nullptr;
+    data.weaponSource = nullptr;
+    data.ammoSource = nullptr;
+}
+
+void on_projectile_launch (RE::Projectile* projRef, RE::Projectile::LaunchData& ldata)
+{
+    LOG("called on_projectile_launch()");
+    if (ldata.projectileBase->formID == my::elemTriumvirateProj.p->formID)   // triumvirate of elements
+    {
+        if (!ldata.shooter || !ldata.shooter->IsPlayerRef()) return;
+        fill_launchData (my::newLaunchData1, my::fireWaveHorzProj.p,  &ldata, nullptr);
+        fill_launchData (my::newLaunchData2, my::frostWaveHorzProj.p, &ldata, nullptr);
+        //my::newLaunchData1.angleX += 0.012f;
+        //my::newLaunchData2.angleX += 0.024f;   // fly upper/lower (Y)
+
+        RE::ProjectileHandle newHandle1 {};
+        RE::ProjectileHandle newHandle2 {};
+        RE::Projectile::Launch (&newHandle1, my::newLaunchData1);
+        RE::Projectile::Launch (&newHandle2, my::newLaunchData2);
+
+        u_set_rotation_y (newHandle1.get().get()->AsReference(), newHandle1.get().get()->GetAngleY() + 12.f);   // X-wing rotation of waves
+        u_set_rotation_y (newHandle2.get().get()->AsReference(), newHandle2.get().get()->GetAngleY() - 12.f);
+    }
+}
 
 
 bool on_arrow_collide (RE::ArrowProjectile* arrow, RE::hkpAllCdPointCollector* collidable)
@@ -1975,15 +2101,108 @@ void update_mass_effects (RE::Actor* actor, float total_eq_weight = 0, bool abou
     //LOG("222");
     u_update_speedMult(actor);
     // auto total_inv_weight = mys::player->GetActorValue(RE::ActorValue::kInventoryWeight);   //  for total inventory weight
-
 }
+
+
+void on_spell_release (RE::ActorMagicCaster* this_, RE::MagicItem* magic_item)   // works 1 time after spell release, don't catch that spell was dual-casted, except conc
+{
+    LOG("on_spell_release()");
+    if (auto caster = this_->actor) {
+        //this_->GetIsDualCasting());   // only conc
+    }
+}
+
+bool on_check_cast (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dualCast)   // for ff spells works 1 time on casting and 2 times after release, always knows if dual cast.
+{                                                                                       // for conc spells works every second. Also works when eating food, potions etc
+    LOG("on_check_cast()");
+    if (auto caster = this_->actor) {
+        if (auto spell = mitem->As<RE::SpellItem>()) {
+            if (!caster->IsCasting(spell)) return true;   // without isCasting check will work for spells when opening magic menu. With this still works for release and casting.
+            gameplay::handle_cast_arcane_curse (caster, spell, dualCast);
+        }     
+    }
+    return true;
+}
+
+float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect)
+{
+    LOG("called on_resist_apply()");
+    // for conc works every ~2 sec
+    return 1.f;
+}
+
+void on_jump (RE::Actor *actor)
+{
+    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -12.f);
+    if (actor->HasSpell(my::meditationSpell.p)) actor->RemoveSpell(my::meditationSpell.p);
+    my::meditateState = false;
+}
+
+void on_3d_load (RE::TESObjectREFR *refr)   // on spawn
+{
+    //LOG("on_3d_load()");
+    //auto actor = refr->As<RE::Actor>();
+    //
+}
+
+bool can_be_passed_mech (RE::TESBoundObject* obj)  // only items can be given / taken to mech
+{
+    LOG("can_be_passed_mech()");
+    if (obj->As<RE::TESObjectMISC>() && obj->As<RE::TESObjectMISC>()->HasKeyword(my::canBeGivenToMech.p)) return true;
+    if (obj->As<RE::TESObjectWEAP>() && obj->As<RE::TESObjectWEAP>()->HasKeyword(my::canBeGivenToMech.p)) return true;
+    return false;
+}
+
+
+bool on_remove_item_from_actor (RE::Character *actor, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont)
+{
+    LOG("on_remove_item_from_actor()");  // this func 
+    if (targetCont) {
+        auto toActor = targetCont->As<RE::Actor>();
+        if (toActor && toActor->GetActorBase() && toActor->GetActorBase()->HasKeyword(my::playersAutomaton.p)) return can_be_passed_mech (item);
+    }
+    if (actor && actor->GetActorBase()) {
+        if (actor->GetActorBase()->HasKeyword(my::playersAutomaton.p) && targetCont) return can_be_passed_mech (item);
+    }
+        
+    //if (reason == RE::ITEM_REMOVE_REASON::kStoreInTeammate)    // 
+    //if (reason == RE::ITEM_REMOVE_REASON::kStoreInContainer)
+    return true;  // allow move from container
+}
+
+bool on_remove_item_from_cont (RE::TESObjectREFR* cont, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont)
+{
+    LOG("on_remove_item_from_cont()");
+    //...
+    return true;
+}
+
+bool on_additem_to_actor (RE::Character *actor, RE::TESBoundObject* object, RE::ExtraDataList* extraList, std::int32_t count, RE::TESObjectREFR* fromRefr)
+{
+    if (!actor || !object) return true;
+    LOG("on_additem_to_actor() for - {}", object->GetName());
+    return true;
+}
+
+bool on_additem_to_cont (RE::TESObjectREFR *cont, RE::TESBoundObject* object, RE::ExtraDataList* extraList, std::int32_t count, RE::TESObjectREFR* fromRefr)
+{
+    if (!cont || !object) return true;
+    LOG("on_additem_to_cont() for - {}", object->GetName());
+    return true;
+}
+
+void on_pickup_object (RE::Character* actor, RE::TESObjectREFR* object, std::int32_t count, bool arg3, bool playSound)
+{
+    if (!actor || !object) return;
+    LOG("on_pickup_object() for - {}", object->GetName());
+}
+
 
 inline void update_perkArmorBuffs (RE::Actor* actor)  //  to apply perk % armor bonuses for npc
 {
     actor->ModActorValue(RE::ActorValue::kDamageResist, -1.0f);
     actor->ModActorValue(RE::ActorValue::kDamageResist, 1.0f);
 }
-
 
 void on_equip (RE::Actor* actor, RE::TESBoundObject* object, RE::ObjectEquipParams* params) 
 {
@@ -2089,8 +2308,8 @@ void log_game_info (RE::Actor* pl, bool load, bool death, RE::Actor* killer, boo
         logFileLines.push_back("1");  // if no file, create first notes
     }
 
-	string info = "[" + logFileLines[1] + "] ";
-	
+    string info = "[" + logFileLines[1] + "] ";
+    
     
     if      (death)   info += "DEATH; ";
     else if (load)    info += "LOAD";
@@ -2133,7 +2352,7 @@ void log_game_info (RE::Actor* pl, bool load, bool death, RE::Actor* killer, boo
     int req_incoming_damage = int(RE::GameSettingCollection::GetSingleton()->GetSetting("fDiffMultHPToPCL")->GetFloat()*100); 
     int req_dealt_damage    = int(RE::GameSettingCollection::GetSingleton()->GetSetting("fDiffMultHPByPCL")->GetFloat()*100);
     info += string("Req ") + std::to_string(req_dealt_damage) + "/" + std::to_string(req_incoming_damage) + "; ";
-	info += string("DMult ") + u_trimmed_str(pl->GetActorValue(RE::ActorValue(RE::ActorValue::kAttackDamageMult))) + "; ";
+    info += string("DMult ") + u_trimmed_str(pl->GetActorValue(RE::ActorValue(RE::ActorValue::kAttackDamageMult))) + "; ";
 
     if (!death) // info
     {
@@ -2165,15 +2384,24 @@ void log_game_info (RE::Actor* pl, bool load, bool death, RE::Actor* killer, boo
             info += "[StatEditor] ON!; ";
         }
     }
+    //char time_buf[21];
+    //time_t now;
+    //time(&now);
+    //strftime (time_buf, 21, "%Y-%m-%d|%H:%M:%S", gmtime(&now));  // compil says gmtime() is unsafe
+    //info += string(time_buf) + "(+3);";
+
     char time_buf[21];
-    time_t now;
-    time(&now);
-    strftime(time_buf, 21, "%Y-%m-%d|%H:%M:%S", gmtime(&now));  // current time string
-    info += string(time_buf) + "(+3);";
+    time_t now = time(nullptr);  // Получаем текущее время
+    struct tm time_info;         // Структура для хранения времени
+    if (gmtime_s(&time_info, &now) == 0) {  // Если успешно 
+        strftime(time_buf, sizeof(time_buf), "%Y-%m-%d|%H:%M:%S", &time_info);
+        info += string(time_buf) + "(+3);";
+    } 
+    else info += "ERROR_TIME;"; 
 
     if (load) info += "HP_WAS - " + std::to_string(int(pl->GetActorValue(RE::ActorValue::kHealth))) + "; ";
 
-	info += u_get_entered_console_commands();  // console
+    info += u_get_entered_console_commands();  // console
     
     encrypt(logFileLines[0], my::c_key);
     encrypt(logFileLines[1], my::c_key);
@@ -2229,6 +2457,7 @@ void delete_saves()    // delete all saves after death
 
 void on_death (RE::Actor* victim, RE::Actor* killer)  // event onDeath, called after death
 {
+    LOG("called on_death()");
     if (!victim) return;
     qst::check_onDeath_questGoals(victim);
     if (victim->IsPlayerRef()) {
@@ -2241,7 +2470,7 @@ void on_death (RE::Actor* victim, RE::Actor* killer)  // event onDeath, called a
     if (victim->HasMagicEffect(my::bossFightStarter.p)) {
         my::bossFightID.p->value = 0;
     }
-} 
+}
 
 void my::on_wait()
 {
@@ -2295,15 +2524,8 @@ void on_location_change (RE::TESObjectREFRPtr refHandle, RE::BGSLocation* oldLoc
 {
     //auto refr  = refHandle.get();
     //auto actor = refr->As<RE::Actor>();
-	//...
-}
-
-void on_object_loaded (RE::FormID formID, bool loaded)   // event
-{
-    // if (loaded)
     //...
 }
-
 
 void check_silver_oil (RE::Actor *pl, bool is_left, RE::AlchemyItem *oil)     // re-add silver_oil kw after game re-log 
 {
@@ -2408,7 +2630,7 @@ void snowElf_checkEnch (RE::Actor *pl)
 
 void check_knuckles (RE::Actor *pl)  // equip/unequip
 {
- 
+    if (pl->HasSpell(my::meditationSpell.p)) return;
     if (u_get_item_count(pl, my::myUnarmed.p->formID) && !u_worn_has_keyword(pl, my::knuckles_kw.p)) {   // have [unarmed] but no gloves eq
         pl->RemoveItem(my::myUnarmed.p, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);  // -> remove unarmed
     }
@@ -2423,6 +2645,22 @@ void check_knuckles (RE::Actor *pl)  // equip/unequip
                 else                                   // [unarmed] in inventory
                     RE::ActorEquipManager::GetSingleton()->EquipObject(pl, my::myUnarmed.p);  // -> only equip
             }
+        }
+    }
+}
+
+void check_nb (RE::Actor* pl)
+{
+    if (auto Lweap = u_get_weapon(pl, true)) {
+        if (Lweap->IsOneHandedDagger()) {
+            if (my::nb_magicBlade.p->value == 1.f) Lweap->weaponData.reach = 0.75f;
+            else Lweap->weaponData.reach = 0.49f;
+        }
+    }
+    if (auto Rweap = u_get_weapon(pl, false)) {
+        if (Rweap->IsOneHandedDagger()) {
+            if (my::nb_magicBlade.p->value == 1.f) Rweap->weaponData.reach = 0.75f;
+            else Rweap->weaponData.reach = 0.49f;
         }
     }
 }
@@ -2447,74 +2685,20 @@ void handle_fister (RE::Actor *pl)  // dmg type keywords, chances
     my::bashImmunChance.p->value = im;
 }
 
-void check_nb (RE::Actor* pl)
+void handle_pl_arcane_curse (RE::Actor *pl)
 {
-    if (auto Lweap = u_get_weapon(pl, true)) {
-        if (Lweap->IsOneHandedDagger()) {
-            if (my::nb_magicBlade.p->value == 1.f) Lweap->weaponData.reach = 0.75f;
-            else Lweap->weaponData.reach = 0.49f;
-        }
-    }
-    if (auto Rweap = u_get_weapon(pl, false)) {
-        if (Rweap->IsOneHandedDagger()) {
-            if (my::nb_magicBlade.p->value == 1.f) Rweap->weaponData.reach = 0.75f;
-            else Rweap->weaponData.reach = 0.49f;
-        }
-    }
-}
-
-
-// ------
-RE::ProjectileHandle* testLaunch (RE::ProjectileHandle* handle, RE::Projectile::LaunchData& ldata)
-{
-    ldata.angleZ -= 0.1f;                           // чуть левее нормы   (эти параметры работают только для missile projectile, типа шариков)
-    RE::Projectile::Launch(handle, ldata);
-    ldata.angleZ += 0.2f;                           // чуть правее нормы
-    return RE::Projectile::Launch(handle, ldata);
-}
-
-// -------- test ------------
-
-
-
-void test_all_actors_handle () 
-{
-   
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-      for (auto& actorHandle : processLists->highActorHandles) {
-        if (auto actor = actorHandle.get(); actor) {
-           //SKSE::log::info("Got high actor name - {}", actor->GetName());
-        }
-      }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-      for (auto& actorHandle : processLists->middleHighActorHandles) {
-        if (auto actor = actorHandle.get(); actor) {
-           //SKSE::log::info("Got midhigh actor name - {}", actor->GetName());
-        }
-      }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-      for (auto& actorHandle : processLists->middleLowActorHandles) {
-        if (auto actor = actorHandle.get(); actor) {
-           //SKSE::log::info("Got midlow actor name - {}", actor->GetName());
-        }
-      }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-       for (auto& actorHandle : processLists->lowActorHandles) {
-          if (auto actor = actorHandle.get(); actor) {
-            //SKSE::log::info("Got low actor name - {}", actor->GetName());
-          }
-       }
-    }
+    LOG("called handle_pl_arcane_curse()");
+    gameplay::handle_player_arcane_curse(pl);
+    float curse = pl->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
+    if (curse > 100.f) gameplay::increase_arcane_curse(pl, 1.f);
+    if (curse < 0) pl->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -curse); // clamp
 }
 
 
 void on_my_update()
 {
     mys::player->SetActorValue  (RE::ActorValue::kMood, mys::player->GetBaseActorValue(RE::ActorValue::kMagicka));
-	mys::player->SetBaseActorValue (RE::ActorValue::kConfidence, mys::player->GetBaseActorValue(RE::ActorValue::kStamina)); // base av
+    mys::player->SetBaseActorValue (RE::ActorValue::kConfidence, mys::player->GetBaseActorValue(RE::ActorValue::kStamina)); // base av
 
     if (u_worn_has_keyword(mys::player, mys::armorHeavyKw))  mys::hasHeavyArmor = true;
     else  mys::hasHeavyArmor = false;
@@ -2523,12 +2707,14 @@ void on_my_update()
     update_mass_effects(mys::player);
     handle_moveSpeed_compensation();
     handle_weaponBased_attack_speed();
+    handle_numbers_widget ();
+    handle_pl_arcane_curse (mys::player);
     update_exp (mys::player);
     mys::player->WornArmorChanged();  // for update armor % perk entries
     mys::attackKeyHolding = false;
     mys::xdescr_state = 0;
     mys::nb_hold_state = 0;
-    
+
     if (mys::gameProcessed->value > 0)  // after player selected start
     {
         qst::check_class_achievements(mys::player);
@@ -2541,14 +2727,11 @@ void on_my_update()
 
     if (my::twicedUpdate)  // every 2nd update
     {
+        // ------- test ---------
 
-		// ------- test ---------
-
-		//auto alvorObj = RE::TESForm::LookupByID<RE::TESBoundObject>(0x13475);
-		//auto alvorRef = u_place_at_me(mys::player, alvorObj, 1, false, false);
-		//alvorRef->As<RE::Actor>()->DrawWeaponMagicHands(true);
-
-	    //----------------------------
+        //auto alvorObj = RE::TESForm::LookupByID<RE::TESBoundObject>(0x13475);
+        //auto alvorRef = u_place_at_me(mys::player, alvorObj, 1, false, false);
+        //auto alvor = alvorRef->As<RE::Actor>();
 
         update_gamelog (mys::player);
         update_keycodes();
@@ -2655,6 +2838,7 @@ namespace my
         currentBossAutocast = nullptr;
         twicedUpdate = false;
         snowElf_re_chanted = false;
+        meditateState = false;
         instantAbIndex = 0;
         rightHandKeyCode = 256;        // initial value = mouse left
         log_counter = 200;
@@ -2749,6 +2933,7 @@ namespace my
     }
 }
 
+#undef KINSTANT
 
 
 

@@ -1,7 +1,9 @@
-#pragma once
+
+#pragma warning (disable : 4189)
 
 #include "utils.h"
-#include "core.h"
+#include "REL/Relocation.h"
+//#include "core.h"
 #include <windows.h>
 #include <Xinput.h>
 
@@ -69,7 +71,8 @@ auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> flo
 
 auto u_actor_has_active_mgef_with_keyword (RE::Actor *actor, const RE::BGSKeyword *keyword) -> bool 
 {
-    auto active_effects = actor->GetActiveEffectList();   // list
+    LOG ("called u_actor_has_active_mgef_with_keyword()");
+    auto active_effects = actor->GetActiveEffectList();      // list
     if (!active_effects) {
         return false;
     }
@@ -140,14 +143,14 @@ void u_cast_on_self (RE::SpellItem* spell, RE::Actor* actor)
     actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(spell, false, nullptr, 1.0f, false, 0.0f, actor);
 }
 
-
+/*
 void u_equip_spell (RE::Actor* actor, RE::SpellItem* spell, SkyrimEquipSlot slot)
 {
     if (!actor || !spell) return;
     auto eq = RE::ActorEquipManager::GetSingleton();
     if      (slot == SkyrimEquipSlot::kRight) eq->EquipSpell (actor, spell, my::slotRightHand.p);
     else if (slot == SkyrimEquipSlot::kLeft)  eq->EquipSpell (actor, spell, my::slotLeftHand.p);
-	else if (slot == SkyrimEquipSlot::kPower) eq->EquipSpell (actor, spell);
+    else if (slot == SkyrimEquipSlot::kPower) eq->EquipSpell (actor, spell);
 }
 
 void u_equip_item (RE::Actor* actor, RE::TESBoundObject* obj, std::optional<SkyrimEquipSlot> slot)   // additem (if need) and equip
@@ -161,15 +164,15 @@ void u_equip_item (RE::Actor* actor, RE::TESBoundObject* obj, std::optional<Skyr
     else if (slot == SkyrimEquipSlot::kPotion) eq->EquipObject (actor, obj, nullptr, 1, my::slotPotion.p);
     else eq->EquipObject (actor, obj);  // default equip
 }
+*/
 
-RE::SpellItem* u_get_equipped_spell_by_slot (RE::Actor* actor, RE::MagicSystem::CastingSource slot) 
+RE::SpellItem* u_get_equipped_spell_by_slot (RE::Actor* actor, RE::MagicSystem::CastingSource source) 
 {
-    assert (actor);
-	using Slots = RE::MagicSystem::CastingSource;
-    uint32_t islot = static_cast<uint32_t>(slot);    // 0 - left,  1 - right, 2 - ability/shout (in our case only ability), 3 - instant (not used)
+    using Source = RE::MagicSystem::CastingSource;
+    uint32_t slot = static_cast<uint32_t>(source);    // 0 - left,  1 - right, 2 - other (ability/shout) (in our case only ability), 3 - instant (not used here, is used for castSpellImmediate)
     
-    if (slot == Slots::kLeftHand || slot == Slots::kRightHand) {
-        auto mgItem = actor->selectedSpells[islot];               // selectedSpells[] contain only l/r hand spells
+    if (source == Source::kLeftHand || source == Source::kRightHand) {
+        auto mgItem = actor->selectedSpells[slot];               // selectedSpells[] contain only l/r hand spells
         if (mgItem && mgItem->formType == RE::FormType::Spell) return mgItem->As<RE::SpellItem>();
         else return 0;
     }
@@ -181,25 +184,23 @@ RE::SpellItem* u_get_equipped_spell_by_slot (RE::Actor* actor, RE::MagicSystem::
 
 RE::TESShout* u_get_equipped_shout (RE::Actor* actor)
 {
-    if (!actor) return nullptr;
     if (auto powerForm = actor->selectedPower) {
         if (powerForm->formType == RE::FormType::Shout) return powerForm->As<RE::TESShout>();
     }
     return nullptr;
 } 
 
-RE::MagicItem* u_get_current_casting_spell (RE::Actor* actor, uint32_t mcasterSlot)  //  0 - left  1 - right, 2 - shout/inst , 3 - ?
-{ 
-    if (!actor) return 0;                                                
-	auto actorsMagicSlot = actor->magicCasters[mcasterSlot];   // magicCaster is used only while is_casting, for example ritual casting or shout hold
-	if (actorsMagicSlot && actorsMagicSlot->currentSpell)
+RE::MagicItem* u_get_current_casting_spell (RE::Actor* actor, uint32_t mcasterSlot)  //  0 - left  1 - right, 2 - shout/iability , 3 - ? (mb instant)
+{                                           
+    RE::ActorMagicCaster *actorsMagicSlot = actor->magicCasters[mcasterSlot];   // magicCaster is used only while is_casting, for example ritual casting or shout hold
+    if (actorsMagicSlot && actorsMagicSlot->currentSpell)
         return actorsMagicSlot->currentSpell; // current casting magicItem (can be spell or shout)
     else return nullptr;
 } 
 
 auto u_is_power_attacking (RE::Actor* actor) -> bool
 {
-    const auto current_process = actor->GetActorRuntimeData().currentProcess;
+    const auto current_process = actor->currentProcess;
     if (!current_process) return false;
 
     const auto high_process = current_process->high;
@@ -223,6 +224,23 @@ auto u_place_at_me (RE::TESObjectREFR* target, RE::TESForm* form, std::uint32_t 
     return func(vm, frame, target, form, count, force_persist, initially_disabled);
 }
 
+void u_set_rotation_x (RE::TESObjectREFR *refr, float angle)
+{
+    REL::Relocation<decltype(u_set_rotation_x)> func (REL::ID(19360));
+    func (refr, angle);
+}
+
+void u_set_rotation_y (RE::TESObjectREFR *refr, float angle)
+{
+    REL::Relocation<decltype(u_set_rotation_y)> func (REL::ID(19361));
+    func (refr, angle);
+}
+
+void u_set_rotation_z (RE::TESObjectREFR *refr, float angle)
+{
+    REL::Relocation<decltype(u_set_rotation_z)> func (REL::ID(19362));
+    func (refr, angle);
+}
 
 void u_jump (RE::Actor* actor)   // makes an actor jump if he can (check state)
 {
@@ -372,7 +390,6 @@ void u_addItem (RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extra
     func(a, item, extraList, count, fromRefr);
 }
 
-
 int32_t u_get_item_count (RE::Actor *actor, uint32_t formid_)
 {
     const auto inv = actor->GetInventory();
@@ -396,17 +413,17 @@ void u_remove_all_items (RE::Actor *actor)
     return;
 }
 
-int32_t u_PapyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) // can check references (if the object ref is persistent, it exists in a container as a reference)
+int32_t u_papyrusGetItemCount (RE::TESObjectREFR* cont, RE::TESForm* item) // can check references (if the object ref is persistent, it exists in a container as a reference)
 {
     std::int32_t result = 0;
     if (cont)
          if (auto boundObject = cont->GetBaseObject(); boundObject) // check container ref's base obj, is it valid TESBoundObject
-            if (auto formtype = boundObject->formType.underlying(); formtype == 0x1C || formtype == 0x2B) {  // 0x1C == TESObjectCONT, 0x2B == TESNPC, only these forms are valid
+            if (auto type = boundObject->formType; type == RE::FormType::Container || type == RE::FormType::NPC) {  //  only these forms are valid
                 bool isBound = skyrim_cast<RE::TESBoundObject*>(item) != nullptr;
                 bool isReference = skyrim_cast<RE::TESObjectREFR*>(item) != nullptr; // now check item, cast TESForm to -> TESBoundObject and TESObjectREFR
                 if (isBound || isReference) {
                     using func_t = std::int32_t (*)(RE::TESObjectREFR*, RE::TESForm*, std::int64_t, std::int32_t);
-                    REL::Relocation<func_t> func {REL::VariantID (56062, 56497, 0x9E4710)};
+                    REL::Relocation<func_t> func {REL::ID(56062)};
                     result = func (cont, item, NULL, NULL);
                 }
             }
@@ -420,10 +437,16 @@ bool u_is_in_city (RE::Actor* actor)
     else return false;
 }
 
+bool u_center_on_cell (RE::PlayerCharacter* player, const char editorID, RE::TESObjectCELL *cell)   // РїРµСЂРµРјРµС‰Р°РµС‚ РёРіСЂРѕРєР° РІ С†РµРЅС‚СЂ СЏС‡РµР№РєРё, РІ editorId РїРµСЂРµРґР°РІР°С‚СЊ 0 
+{
+    REL::Relocation<decltype(u_center_on_cell)> func (REL::ID(39365));   
+    return func (player, editorID, cell);
+}
+
 bool get_miscStat (RE::BSFixedString& statName, int& o_value)
 {
     using func_t = decltype (&get_miscStat);
-    REL::Relocation<func_t> func{REL::RelocationID(16120, 16362)};  // 1.5.97 1405E1510
+    REL::Relocation<func_t> func {REL::ID(16120)};  // 1405E1510
     return func (statName, o_value);
 }
 
@@ -455,7 +478,7 @@ std::string u_get_entered_console_commands()
             if   (size == 0) result += "N/A; ";
             else
             {
-                for (int i = 0; i < size; i++) {
+                for (uint32_t i = 0; i < size; i++) {
                     RE::GFxValue val;
                     commandsVal.GetElement(i, &val);
                     if (val.IsString()) {
@@ -501,16 +524,56 @@ float u_get_worn_equip_weight (RE::Actor* actor)
     return eq_weight;
 }
 
-RE::TESObjectREFR::InventoryItemMap u_get_all_worn_objects (const RE::TESObjectREFR::InventoryItemMap &inventory)  // returns all worn objects
+RE::TESObjectREFR::InventoryItemMap u_get_all_worn_objects (RE::Actor* actor)  // returns all worn objects
 {
+    LOG("called u_get_all_worn_objects()");
+    auto inventory = actor->GetInventory();
     RE::TESObjectREFR::InventoryItemMap filtered;
     for (const auto &[item, data] : inventory) {
         const auto &[count, entry] = data;
         if (entry && entry->IsWorn()) {
-            std::unique_ptr <RE::InventoryEntryData> newEntry = std::make_unique<RE::InventoryEntryData>(*entry);  // исп. make_unique для создания unique_ptr на копию entry
-            std::pair <std::int32_t, std::unique_ptr<RE::InventoryEntryData>> newData (count, std::move(newEntry));  // создаем новую пару
-            filtered.insert (std::make_pair(item, std::move(newData)));  // вставляем новую пару в filtered
+            std::unique_ptr <RE::InventoryEntryData> newEntry = std::make_unique<RE::InventoryEntryData>(*entry);  // РёСЃРї. make_unique РґР»СЏ СЃРѕР·РґР°РЅРёСЏ unique_ptr РЅР° РєРѕРїРёСЋ entry
+            std::pair <std::int32_t, std::unique_ptr<RE::InventoryEntryData>> newData (count, std::move(newEntry));  // СЃРѕР·РґР°РµРј РЅРѕРІСѓСЋ РїР°СЂСѓ
+            filtered.insert (std::make_pair(item, std::move(newData)));  // РІСЃС‚Р°РІР»СЏРµРј РЅРѕРІСѓСЋ РїР°СЂСѓ РІ filtered
         }
+    }
+    return filtered;
+}
+
+bool u_is_equipped (RE::Actor* actor, RE::TESBoundObject* obj)
+{
+    LOG("called u_is_equipped()");
+    for (const auto &[item, data] : actor->GetInventory()) {
+        const auto &[count, entry] = data;
+        if (obj->formID == item->formID && entry && entry->IsWorn()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void u_unequip_all_items (RE::Actor* actor)
+{
+    LOG("called u_unequip_all()");
+    auto inventory = actor->GetInventory();
+    RE::TESObjectREFR::InventoryItemMap filtered;
+    for (const auto &[item, data] : inventory) {
+        const auto &[count, entry] = data;
+        if (entry && entry->IsWorn()) {
+            RE::ActorEquipManager::GetSingleton()->UnequipObject(actor, item);
+        }
+    }
+}
+
+std::vector<RE::TESBoundObject*> u_get_inv_items_by_keyword (RE::TESObjectREFR* ref, const std::string &keywordEditorID)
+{
+    LOG("called u_get_inv_items_by_keyword()");
+    auto inventory = ref->GetInventory();
+    std::vector<RE::TESBoundObject*> filtered;
+    std::vector<std::string> kw = {keywordEditorID};
+    for (const auto &[item, data] : inventory) {
+        if(item->HasAnyKeywordByEditorID(kw))
+            filtered.push_back (item);
     }
     return filtered;
 }
@@ -548,7 +611,7 @@ RE::ActorValue u_get_secondary_resist_name (const RE::MagicItem *magic_item)    
  float u_get_actor_value_max (RE::Actor* actor, const RE::ActorValue av)
  {
     if (!actor) return 0.f;
-    return actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kTemporary, av) + actor->GetPermanentActorValue(av);
+    return actor->GetActorValueModifier(RE::ACTOR_VALUE_MODIFIER::kTemporary, av) + actor->GetActorValueMax(av);
  }
 
 
@@ -588,7 +651,7 @@ float u_get_av_percent (RE::Actor* actor, RE::ActorValue av)
 
  inline char set_sound_position (RE::BSSoundHandle* a1, float x, float y, float z) {
     using func_t = decltype(&set_sound_position);
-    REL::Relocation<func_t> func{RELOCATION_ID(66370, 67631)};
+    REL::Relocation<func_t> func {RELOCATION_ID(66370, 67631)};
     return func(a1, x, y, z);
  }
 
@@ -607,7 +670,6 @@ float u_get_av_percent (RE::Actor* actor, RE::ActorValue av)
         soundHelper_c (&handle);              // play
     }
  }
-
 
  std::string  u_int2hex (int decimal)
  {
@@ -633,32 +695,38 @@ float u_get_av_percent (RE::Actor* actor, RE::ActorValue av)
     return RE::GameSettingCollection::GetSingleton()->GetSetting("fDiffMultHPByPCL")->GetFloat();
  }
 
- std::vector<RE::Actor*> get_player_followers () 
+void u_exit_game ()
+{
+    RE::Main::GetSingleton()->quitGame = true;
+}
+
+void u_set_god_mode (bool set)      // tgm on/off
+{
+    REL::Relocation<decltype(u_set_god_mode)> func (REL::ID(39424));
+    func(set);
+}
+
+ std::vector<RE::Actor*> u_get_player_followers() 
  {
     std::vector<RE::Actor*> followers;
     
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
+    if (const auto processLists = RE::ProcessLists::GetSingleton())
+    {
       for (auto& actorHandle : processLists->highActorHandles) {
         if (auto actor = actorHandle.get(); actor && actor->IsPlayerTeammate()) {
            followers.push_back(actor.get());
         }
       }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
       for (auto& actorHandle : processLists->middleHighActorHandles) {
         if (auto actor = actorHandle.get(); actor && actor->IsPlayerTeammate()) {
            followers.push_back(actor.get());
         }
       }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
       for (auto& actorHandle : processLists->middleLowActorHandles) {
         if (auto actor = actorHandle.get(); actor && actor->IsPlayerTeammate()) {
            followers.push_back(actor.get());
         }
       }
-    }
-    if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
       for (auto& actorHandle : processLists->lowActorHandles) {
         if (auto actor = actorHandle.get(); actor && actor->IsPlayerTeammate()) {
            followers.push_back(actor.get());
@@ -668,18 +736,14 @@ float u_get_av_percent (RE::Actor* actor, RE::ActorValue av)
     return followers;
  }
 
-RE::BSTArray<RE::CommandedActorData>*  get_commanded_actors (const RE::Actor* actor)
+RE::BSTArray<RE::CommandedActorData>* u_get_commanded_actors (RE::Actor* actor)
 {
-    if (!actor) return nullptr;
-    
-    auto process = actor->currentProcess;
-    if (!process) return nullptr;
-    
-    auto mid_high = process->middleHigh;  // commanded actors are in middleHigh group
-    if (!mid_high) return nullptr;
-    
-    if (!mid_high->commandedActors.empty()) {
-       return std::addressof(mid_high->commandedActors);
+    if (auto aiprocess = actor->currentProcess) {
+        if (auto mid_high = aiprocess->middleHigh) {
+            if (!mid_high->commandedActors.empty()) {
+                return std::addressof(mid_high->commandedActors);  // commanded actors are in middleHigh group
+            }
+        }
     }
     return nullptr;
 }
@@ -689,7 +753,7 @@ void u_move_all_followers_to_player (const bool followers, const bool summons)
     auto player = RE::PlayerCharacter::GetSingleton();
     
     if (followers) {
-        auto teammates = get_player_followers();
+        auto teammates = u_get_player_followers();
         for (auto teammate : teammates) {
           if (teammate) {
             teammate->MoveTo(player);
@@ -697,8 +761,8 @@ void u_move_all_followers_to_player (const bool followers, const bool summons)
         }
     }
     if (summons) {
-		if (auto array_summons = get_commanded_actors(player); array_summons)
-		{
+        if (auto array_summons = u_get_commanded_actors(player))
+        {
            for (const auto& summon_data : *array_summons) {
               if (summon_data.commandedActor && summon_data.commandedActor.get() && summon_data.commandedActor.get().get()) {
                   summon_data.commandedActor.get()->MoveTo(player);
@@ -708,6 +772,14 @@ void u_move_all_followers_to_player (const bool followers, const bool summons)
     }
 }
 
+bool u_mark_for_delete (void* a1, void* a2, RE::TESObjectREFR* refr)  //  includes virt. refr->SetDelete(),  call as (nullptr, nullptr, ref)
+{
+    using func_type = decltype(u_mark_for_delete);
+    REL::Relocation<func_type> func (REL::ID(22027));
+    return func (a1, a2, refr);
+}
+
+
 void u_clone_npc()  //  temp // temporary // test // use if works         // creates new actor / object   // simple ver
 {
     auto boundObj = RE::TESForm::LookupByID<RE::TESBoundObject>(0x13475);  // ?
@@ -716,63 +788,125 @@ void u_clone_npc()  //  temp // temporary // test // use if works         // cre
     // cell, world, nullptr, nullptr, emptyRef, false, true); RE::TESObjectREFR* newRef = newRefHandle.get().get();
 }
 
-
-RE::TESNPC* u_clone_npc_ (RE::FormID npcID, const std::string& modName)  // RP ver - доделать если надо
-{
-
-    RE::TESNPC* oldNpc = my::handler->LookupForm<RE::TESNPC>(npcID, modName);
-    RE::TESNPC* newNpc = nullptr;                                                 // тут по другому создается
-
-    if (oldNpc || oldNpc->formType != RE::FormType::NPC) 
-        return nullptr;
-
-    memcpy (newNpc, oldNpc, sizeof RE::TESNPC);   // copy   // видимо newNpc должен быть создан иначе
-
-    auto npc_ = newNpc;
-
-	npc_->numContainerObjects = 0;
-    npc_->containerObjects = nullptr;
-    npc_->crimeFaction = nullptr;
-    npc_->faceNPC = nullptr;
-    npc_->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kPCLevelMult);
-    npc_->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kUnique);
-    npc_->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kSimpleActor);
-
-    // ... 
-
-	RE::TESNPC::FaceData* faceData = npc_->faceData;
-    npc_->faceData = new RE::TESNPC::FaceData;          // создание "нового, независимого" FaceData, что-бы данные прошлого npc не менялись по этому указателю
-    if (!npc_->faceData) return nullptr;
-    *npc_->faceData = *faceData;
-
-	// return npc_;
-	return nullptr;
-}
-
-
-void u_turn_controls_on_off (bool status_)  // toggle controls
+void u_toggle_controls (bool status_)
 {
     auto control = RE::ControlMap::GetSingleton();
     if (!control) return;
     control->ToggleControls(RE::ControlMap::UEFlag::kAll, status_);
 }
 
+auto u_disable_controls_selective() -> RE::stl::enumeration<RE::UserEvents::USER_EVENT_FLAG, std::uint32_t>
+{
+    auto controls = RE::ControlMap::GetSingleton();
+    auto wasEnabledControls = controls->enabledControls;  // controls, enabled before this func
+    using Con = RE::ControlMap::UEFlag;
+    controls->ToggleControls(Con::kFighting, false);
+    controls->ToggleControls(Con::kJumping, false);       // disable some controls
+    controls->ToggleControls(Con::kMenu, false);
+    controls->ToggleControls(Con::kMovement, false);
+    controls->ToggleControls(Con::kMainFour, false);
+    return wasEnabledControls;                            // return what was enabled
 
-uint32_t u_get_open_state (RE::TESObjectREFR* refr)   // get door or container open state  1: Open, 2: Opening, 3: Closed, 4: Closing, 0: None (object can't be opened or closed)
+    // RE::ControlMap::GetSingleton()->enabledControls = result_of_this_function;     // restore controls
+}
+
+
+bool u_findClosestReferenceOfTypeInRadius (RE::TES* tes, const RE::TESBoundObject &obj, const RE::NiPoint3 &centerOfSearch, float afRadius, RE::NiPointer<RE::TESObjectREFR> &outRef)
+{
+    REL::Relocation<decltype(u_findClosestReferenceOfTypeInRadius)> func (REL::ID(13269));
+    return func (tes, obj, centerOfSearch, afRadius, outRef);
+
+    // ---- РєР°Рє РІС‹Р·С‹РІР°С‚СЊ ----:
+    //if (RE::AlchemyItem* mead = RE::TESForm::LookupByID<RE::AlchemyItem>(0x34C5D)){
+    //    if (auto meadObj = mead->As<RE::TESBoundObject>()) {
+    //        RE::TESObjectREFRPtr outRefPtr;
+    //        RE::NiPoint3 playerPos = mys::player->GetPosition();
+    //        FindClosestReferenceOfTypeInRadius(RE::TES::GetSingleton(), *meadObj, playerPos, 500.f, outRefPtr); // radius in unit
+    //        if(outRefPtr.get()) RE::DebugNotification(outRefPtr.get()->GetName());
+    //    }
+    //} 
+}
+
+uint32_t u_get_open_state (RE::TESObjectREFR* refr)     // get door or container open state  1: Open, 2: Opening, 3: Closed, 4: Closing, 0: None (object can't be opened or closed)
 {
     if (!refr) return 0;
-    REL::Relocation<decltype(u_get_open_state)> func (RELOCATION_ID(14180, 14288).address());    // в момент активации закрытой двери будет 1, в момент активации открытой 3
+    REL::Relocation<decltype(u_get_open_state)> func (RELOCATION_ID(14180, 14288).address());    // РІ РјРѕРјРµРЅС‚ Р°РєС‚РёРІР°С†РёРё Р·Р°РєСЂС‹С‚РѕР№ РґРІРµСЂРё Р±СѓРґРµС‚ 1, РІ РјРѕРјРµРЅС‚ Р°РєС‚РёРІР°С†РёРё РѕС‚РєСЂС‹С‚РѕР№ 3
     return func (refr);
+}
+
+bool u_is_food (RE::TESBoundObject* obj)     //
+{
+    RE::BGSKeyword *vendorItemFood = RE::TESForm::LookupByID<RE::BGSKeyword>(0x8CDEA);
+    if (RE::AlchemyItem* food = obj->As<RE::AlchemyItem>()) {
+        return food->HasKeyword(vendorItemFood);  // alchItem && hasKeyword(food)
+    }
+    return false;
+}
+
+void u_apply_imod (RE::TESImageSpaceModifier* imod, float power)
+{
+    RE::ImageSpaceModifierInstanceForm::Trigger (imod, power, RE::PlayerCharacter::GetSingleton()->Get3D()); // power 0 - 1.0               
+}
+
+void u_stop_imod (RE::TESImageSpaceModifier* imod)
+{
+    RE::ImageSpaceModifierInstanceForm::Stop (imod);
+}
+
+RE::TESRegion* u_get_current_weatherType_region ()  // РїРѕР»СѓС‡Р°РµС‚ С‚РµРєСѓС‰РёР№ РїРѕРіРѕРґРЅС‹Р№ СЂРµРіРёРѕРЅ СЏС‡РµР№РєРё РёРіСЂРѕРєР°, СЂР°Р±РѕС‚Р°РµС‚ Рё РёР· РёРЅС‚РµСЂСЊРµСЂР°. РЎРїРёСЃРѕРє id РІСЃРµС… СѓСЃР»РѕРІРЅС‹С… СЂРµРіРёРѕРЅРѕРІ РјРѕР¶РЅРѕ РїРѕСЃРјРѕС‚СЂРµС‚СЊ РІ СЂРї
+{
+    using func_type = decltype(u_get_current_weatherType_region);
+    REL::Relocation<func_type> func (REL::ID(25713));
+    return func();
+}
+
+void u_set_weather (RE::Sky *sky, RE::TESWeather *weather, bool force, bool accelerate)   // 1 par = RE::Sky::GetSingleton() , accelerate = soft transition
+{
+    using func_type = decltype(u_set_weather);
+    REL::Relocation<func_type> func (REL::ID(25694));
+    func (sky, weather, force, accelerate);
+}
+
+void u_show_message_box2 (std::string& bodyText, std::vector<std::string> buttonTextValues, std::function<void(unsigned int)> callback)
+{
+   LOG("called u_show_message_box2()");
+   u_MessageBox::MyMessageBox::Show (bodyText, buttonTextValues, callback);    // from zero
+}
+
+void u_show_message_box (RE::BGSMessage* msgBox, std::function<void(unsigned int)> callback)
+{
+    LOG("called u_show_message_box()");
+    u_MessageBox::MyMessageBox::Show (msgBox, callback);    // from ready messageBox object
+}
+
+float u_get_distance (RE::TESObjectREFR* a, RE::TESObjectREFR* b) 
+{
+    return a->GetPosition().GetDistance(b->GetPosition());  // also there is  .GetSquaredDistance()
+}
+
+
+void craftingMenusTest()       //  later learn how to deal with craft menus
+{
+    auto ui = RE::UI::GetSingleton();
+    if (ui->IsMenuOpen("Crafting Menu"))
+    {
+        auto Menu = ui->GetMenu<RE::CraftingMenu>().get();
+        auto menu1 = skyrim_cast<RE::CraftingSubMenus::ConstructibleObjectMenu*>(Menu->subMenu);   //  РєСѓР·РЅРёС†Р°, СЃРѕР·РґР°РЅРёРµ РїСЂРµРґРјРµС‚РѕРІ
+        auto menu2 = skyrim_cast<RE::CraftingSubMenus::EnchantConstructMenu*>(Menu->subMenu);      //  Р·Р°С‡Р°СЂРѕРІР°РЅРёРµ
+        auto menu3 = skyrim_cast<RE::CraftingSubMenus::SmithingMenu*>(Menu->subMenu);              //  СѓР»СѓС‡С€РµРЅРёРµ РїСЂРµРґРјРµС‚РѕРІ, РїСЂРѕС‚РѕС‡РєР°
+
+        if (menu3 && menu3->furniture && menu3->furniture->HasKeywordString("CraftingSmithingSharpeningWheel")) {    // РґРѕРї РїСЂРѕРІРµСЂРєР° С‡С‚Рѕ СЌС‚Рѕ РёРјРµРЅРЅРѕ РјРµРЅСЋ РїСЂРѕС‚РѕС‡РєРё (СЃ)
+            menu3->unk100[menu3->unk150].constructibleObject->createdItem;    // РґРѕСЃС‚СѓРї Рє createdItem 
+        }
+        
+    }
 }
 
 
  void u_log_actor_perk_entries (RE::Actor* actor, RE::BGSPerkEntry::EntryPoint theEntry, std::string entryNameForLog)
  {
 
-     if (!actor) { LOG("!actor.."); return; }
-
     using PerkEntryFunction = RE::BGSEntryPointPerkEntry::EntryData::Function;
-
     int numPerks = actor->GetActorBase()->perkCount;
 
     for (int i = 0; i < numPerks; i++)
@@ -781,14 +915,14 @@ uint32_t u_get_open_state (RE::TESObjectREFR* refr)   // get door or container o
          if (!perk) continue;
          for (auto &entry : perk->perkEntries) 
          {        
-            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;                                        //   тут отсеиваем архетипы  ability и quest
+            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;                                        //   С‚СѓС‚ РѕС‚СЃРµРёРІР°РµРј Р°СЂС…РµС‚РёРїС‹  ability Рё quest
             
-            // тут приводим ентри общего архетипа BGSPerkEntry к типу конкретно BGSEntryPointPerkEntry (не ability и quest)
+            // С‚СѓС‚ РїСЂРёРІРѕРґРёРј РµРЅС‚СЂРё РѕР±С‰РµРіРѕ Р°СЂС…РµС‚РёРїР° BGSPerkEntry Рє С‚РёРїСѓ РєРѕРЅРєСЂРµС‚РЅРѕ BGSEntryPointPerkEntry (РЅРµ ability Рё quest)
             RE::BGSEntryPointPerkEntry *entry_point = skyrim_cast<RE::BGSEntryPointPerkEntry*>(entry);    
-            if (entry_point->entryData.entryPoint != theEntry) continue;        //   тут отсеиваем все ентри кроме нужного, например  ModSpellMagnitude
-            if (entry_point->entryData.function == PerkEntryFunction::kMultiplyValue)                        //   проверяем мат. функцию нашего PerkEntry
+            if (entry_point->entryData.entryPoint != theEntry) continue;        //   С‚СѓС‚ РѕС‚СЃРµРёРІР°РµРј РІСЃРµ РµРЅС‚СЂРё РєСЂРѕРјРµ РЅСѓР¶РЅРѕРіРѕ, РЅР°РїСЂРёРјРµСЂ  ModSpellMagnitude
+            if (entry_point->entryData.function == PerkEntryFunction::kMultiplyValue)                        //   РїСЂРѕРІРµСЂСЏРµРј РјР°С‚. С„СѓРЅРєС†РёСЋ РЅР°С€РµРіРѕ PerkEntry
             {
-                    // приводим поле ентри ->function_data типа EntryPointFunctionData к конкретному типу EntryPointFunctionDataOneValue (данные функции с 1 слотом)
+                    // РїСЂРёРІРѕРґРёРј РїРѕР»Рµ РµРЅС‚СЂРё ->function_data С‚РёРїР° EntryPointFunctionData Рє РєРѕРЅРєСЂРµС‚РЅРѕРјСѓ С‚РёРїСѓ EntryPointFunctionDataOneValue (РґР°РЅРЅС‹Рµ С„СѓРЅРєС†РёРё СЃ 1 СЃР»РѕС‚РѕРј)
                      RE::BGSEntryPointFunctionDataOneValue* function_data = skyrim_cast<RE::BGSEntryPointFunctionDataOneValue*>(entry_point->functionData);
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: multiply_value by - {}", entryNameForLog, perk->fullName, u_int2hex(perk->formID), function_data->data);
@@ -799,7 +933,7 @@ uint32_t u_get_open_state (RE::TESObjectREFR* refr)   // get door or container o
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: add_value - {}", entryNameForLog, perk->fullName, perk->formID, function_data->data);
             }
-            else if (entry_point->entryData.function == PerkEntryFunction::kMultiplyActorValueMult)            //  тут в функции уже 2 слота, AV и мульт, значит приводим к типу для 2 слотов
+            else if (entry_point->entryData.function == PerkEntryFunction::kMultiplyActorValueMult)            //  С‚СѓС‚ РІ С„СѓРЅРєС†РёРё СѓР¶Рµ 2 СЃР»РѕС‚Р°, AV Рё РјСѓР»СЊС‚, Р·РЅР°С‡РёС‚ РїСЂРёРІРѕРґРёРј Рє С‚РёРїСѓ РґР»СЏ 2 СЃР»РѕС‚РѕРІ
             {
                      BGSEntryPointFunctionDataTwoValue* function_data = skyrim_cast<BGSEntryPointFunctionDataTwoValue*>(entry_point->functionData);
                      if (!function_data) continue;
@@ -810,7 +944,6 @@ uint32_t u_get_open_state (RE::TESObjectREFR* refr)   // get door or container o
                      if (!function_data) continue;
                      LOG("found {} in perk - {}, perkId - {}, func: multiply 1 + AV*mult, mult is - {}", entryNameForLog, perk->fullName, u_int2hex(perk->formID), function_data->data2);
             } 
-
          }
     }
     SKSE::log::info("\n----------------------------------------------------------------------------------\n");
@@ -830,7 +963,7 @@ namespace Utils_anim_namespace
 } 
 
 
- //----------------------------- fenix template class _generic_foo_ , Calls native function by the signature and id (с), check later -----------------------
+ //----------------------------- fenix template class _generic_foo_ , Calls native function by the signature and id (СЃ), check later -----------------------
 
 
 // template <int id, typename x_Function>
@@ -864,7 +997,8 @@ namespace Utils_anim_namespace
 
 using namespace RE;
 
-uint32_t Utils::GamepadMaskToKeycode(uint32_t keyMask) {
+uint32_t Utils::GamepadMaskToKeycode(uint32_t keyMask)
+{
     switch (keyMask) {
          case XINPUT_GAMEPAD_DPAD_UP:
             return kGamepadButtonOffset_DPAD_UP;
@@ -903,7 +1037,7 @@ uint32_t Utils::GamepadMaskToKeycode(uint32_t keyMask) {
     }
 }
 
-TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)            //  обертка над LookupByID()  , возвращает форму по имени мода и id
+TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)            //  РѕР±РµСЂС‚РєР° РЅР°Рґ LookupByID()  , РІРѕР·РІСЂР°С‰Р°РµС‚ С„РѕСЂРјСѓ РїРѕ РёРјРµРЅРё РјРѕРґР° Рё id
 {
     if (!modname.length() || !formid) return nullptr;
     TESDataHandler* dh = TESDataHandler::GetSingleton();
@@ -932,23 +1066,26 @@ TESForm*  Utils::GetFormFromMod (std::string modname, uint32_t formid)          
 
 bool  Utils::PerformAction (BGSAction* action, Actor* actor)
 {
+    LOG("called PerformAction");
     if (action && actor) {
-         std::unique_ptr<TESActionData> data(TESActionData::Create());
-         data->source = NiPointer<TESObjectREFR>(actor);
-         data->action = action;
-         typedef bool func_t(TESActionData*);
-         REL::Relocation<func_t> func{RELOCATION_ID(40551, 41557)};
-         return func(data.get());
+         //std::unique_ptr<TESActionData> data (TESActionData::Create());   // РІ СЃС‚Р°СЂРѕРј РІР°СЂРёР°РЅС‚Рµ С‚СѓС‚ Р±С‹Р»Рѕ С‡РµСЂРµР· unique_ptr    // was  
+         //data->source = NiPointer<TESObjectREFR>(actor);                  // 
+         //data->action = action;
+         //typedef bool func_t(TESActionData*);
+         //REL::Relocation<func_t> func{RELOCATION_ID(40551, 41557)};  // DoIt ()
+         //return func(data.get()); 
+         TESActionData adata (RE::ACTIONPRIORITY::Priority_1, actor, action);   // fenix clib variant
+         adata.DoIt();
     }
     return false;
 }
 
 bool  Utils::PlayIdle (TESIdleForm* idle, Actor* actor, DEFAULT_OBJECT action, Actor* target)
 {
-    if (actor && actor->GetActorRuntimeData().currentProcess) {
+    if (actor && actor->currentProcess) {
          typedef bool (*func_t)(AIProcess*, Actor*, DEFAULT_OBJECT, TESIdleForm*, bool, bool, Actor*);
          REL::Relocation<func_t> func{RELOCATION_ID(38290, 39256)};
-         return func(actor->GetActorRuntimeData().currentProcess, actor, action, idle, true, true, target);
+         return func (actor->currentProcess, actor, action, idle, true, true, target);
     }
     return false;
 }
@@ -1033,3 +1170,6 @@ void Globals::InitializeGlobalVaribles() {
     userEvents = UserEvents::GetSingleton();
     inputDeviceManager = BSInputDeviceManager::GetSingleton();
 }
+
+
+

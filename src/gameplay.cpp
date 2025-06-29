@@ -1,7 +1,6 @@
 
-// SYNCED ++++
-
-#pragma once
+#pragma warning (disable : 4100)
+#pragma warning (disable : 4244)
 
 #include "utils.h"
 #include "gameplay.h"
@@ -55,12 +54,12 @@ namespace gameplay
 
        int32_t price = hands->value; // base price
 
-	   auto st = agr->GetActorValue(RE::ActorValue::kStamina);
-       if      (agr->HasPerk(unarmed_80.p)) damage *= (1 + (st * 0.004f));  // unarmed perks stamina-scaling
-       else if (agr->HasPerk(unarmed_50.p)) damage *= (1 + (st * 0.003f));
-       else if (agr->HasPerk(unarmed_20.p)) damage *= (1 + (st * 0.002f));
+       auto st = agr->GetActorValue(RE::ActorValue::kStamina);
+       if      (agr->HasPerk(unarmed_80.p)) damage *= (1 + (st * 0.0025f));  // unarmed perks stamina-scaling
+       else if (agr->HasPerk(unarmed_50.p)) damage *= (1 + (st * 0.0020f));
+       else if (agr->HasPerk(unarmed_20.p)) damage *= (1 + (st * 0.0015f));
 
-	   if (!isLeft && isPwAtk) damage *= 2.f;  // right hand pwAtk
+       if (!isLeft && isPwAtk) damage *= 2.f;  // right hand pwAtk
 
        if (hands->HasKeyword(knuckles_bleeding.p)) {
            fish_bleed.p->effects[0]->effectItem.magnitude = price/100;  // bleed
@@ -83,7 +82,7 @@ namespace gameplay
        if (!isPwAtk) {
            u_cast(knuckles_jab_spell.p, target, agr);
            if (agr->HasMagicEffect(knuckles_afterBlockTimerSelf.p)) {  // hit just afer block
-               RE::DebugNotification("Êîíòðóäàð");
+               RE::DebugNotification("ÐšÐ¾Ð½Ñ‚Ñ€ÑƒÐ´Ð°Ñ€");
                u_playSound(target, bluntVsOther.p, 1.f);
                u_cast(knuckles_jab_spell.p, target, agr);
                if ((rand() % 10) > 5) {
@@ -101,7 +100,7 @@ namespace gameplay
 
       //________DEBUG________________________________________________________________________
       //float atkDmgMult = 1.f, pwAtkDmgMult = 1.f, target_overcap = 1.f;    
-      // ïðîãîíÿåì 1.f ÷åðåç åíòðè ïåðêîâ àãðåññîðà, ÷òî-áû óçíàòü ñóììàðíûå ìóëüòû. Ïðè ýòîì ïðîâåðÿþòñÿ êîíäèøåíû, è ìû ïîëó÷àåì ðåàëüíûé ìóëüò
+      // Ð¿Ñ€Ð¾Ð³Ð¾Ð½ÑÐµÐ¼ 1.f Ñ‡ÐµÑ€ÐµÐ· ÐµÐ½Ñ‚Ñ€Ð¸ Ð¿ÐµÑ€ÐºÐ¾Ð² Ð°Ð³Ñ€ÐµÑÑÐ¾Ñ€Ð°, Ñ‡Ñ‚Ð¾-Ð±Ñ‹ ÑƒÐ·Ð½Ð°Ñ‚ÑŒ ÑÑƒÐ¼Ð¼Ð°Ñ€Ð½Ñ‹Ðµ Ð¼ÑƒÐ»ÑŒÑ‚Ñ‹. ÐŸÑ€Ð¸ ÑÑ‚Ð¾Ð¼ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÑŽÑ‚ÑÑ ÐºÐ¾Ð½Ð´Ð¸ÑˆÐµÐ½Ñ‹, Ð¸ Ð¼Ñ‹ Ð¿Ð¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ Ñ€ÐµÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¼ÑƒÐ»ÑŒÑ‚
       //RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModIncomingDamage, target, agr, my::myUnarmed.p, std::addressof(target_overcap));
       //RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModAttackDamage, agr, my::myUnarmed.p, target, std::addressof(atkDmgMult));
       //if (isPwAtk) RE::BGSEntryPoint::HandleEntryPoint (RE::BGSEntryPoint::ENTRY_POINT::kModPowerAttackDamage, agr, my::myUnarmed.p, target, std::addressof(pwAtkDmgMult));
@@ -321,7 +320,7 @@ namespace gameplay
    void handle_bossAppearance (RE::Actor *boss)
    {
         currBoss = boss;
-        auto fightID = bossFightID.p->value;
+        int fightID = bossFightID.p->value;
         if (boss->HasSpell(my::olve_training.p) && fightID != Olve2stage && fightID != OlvePre2stage)
             bossFightID.p->value = Olve1stage;
         else if (boss->HasSpell(my::seph_training.p) || boss->HasSpell(my::seph_training2.p))
@@ -377,11 +376,10 @@ namespace gameplay
    void check_bestiary (RE::Actor* actor)  // adds bestiary keywords to generic npc   (TO GAMEPLAY)
    {
           LOG("called check_bestiary()");
-          if (actor->GetActorValue(RE::ActorValue::kMood) == 1.f) return;
-	      
+          
           auto race_id = actor->GetRace()->formID;
           auto base = actor->GetActorBase();
-	      
+          
           if (bestiary_races_map.count(race_id) > 0) {
               base->AddKeyword(bestiary_races_map.at(race_id));
           }
@@ -402,8 +400,68 @@ namespace gameplay
           else if (actor->IsInFaction(BerserkFaction.p))    base->AddKeyword(BestiaryDraugrBerserk.p);
           else if (actor->IsInFaction(CairnBGfaction.p))    base->AddKeyword(BestiaryBlackGuard.p);
           else if (actor->IsInFaction(ValleyGhostFaction.p))base->AddKeyword(BestiaryValleyGhost.p);
-          
-          actor->SetActorValue(RE::ActorValue::kMood, 1.f);
+   }
+
+   void increase_arcane_curse (RE::Actor *caster, float amount)
+   {
+       caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, amount);
+       float curseAV = caster->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
+       if (curseAV >= 100.f) {
+           float maxHP = u_get_actor_value_max(caster, RE::ActorValue::kHealth);
+           float dmg = (caster->IsPlayerRef()) ? maxHP*0.5f : maxHP * 0.08f;
+           if (u_is_equipped(caster, grimoireMagDmgOnHit.p)) dmg = maxHP*0.3f;
+           caster->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
+           u_cast_on_self (arcaneCurseExpl.p, caster);
+           caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -100.f);
+       }
+       if (caster->IsPlayerRef()) {
+           caster->RemoveSpell(arcaneCurseRegenDebuff.p);
+           arcaneCurseRegenDebuff.p->effects[0]->effectItem.magnitude = curseAV*2.5f;
+           caster->AddSpell(arcaneCurseRegenDebuff.p);
+           // summons debuff
+           // damage of mobs explosion
+       }
+   }
+
+   void handle_player_arcane_curse (RE::Actor* pl)
+   {
+       float curse = pl->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
+       if (u_is_equipped(pl, grimoireDecurse.p)) {
+           if (curse > 25.f)
+           pl->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -1.f);
+       }
+       else if (u_is_equipped(pl, grimoireMagFury.p)) {
+           if (curse < 70.f)
+               pl->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, 2.f);
+           else if (curse > 70.f)
+               pl->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -1.f);
+       }
+       if (auto summons = u_get_commanded_actors(pl)) {
+           for (const auto& summon_data : *summons) {
+               if (summon_data.commandedActor && summon_data.commandedActor.get() && summon_data.commandedActor.get().get()) {
+                   auto summon = summon_data.commandedActor.get().get();
+                   summon->RemoveSpell(arcaneCurseSummonDebuffHP.p); 
+                   summon->RemoveSpell(arcaneCurseSummonDebuffAll.p);
+                   float maxHP = u_get_actor_value_max(summon, RE::ActorValue::kHealth);
+                   arcaneCurseSummonDebuffHP.p->effects[0]->effectItem.magnitude = maxHP*curse*0.005f;
+                   for (auto &eff : arcaneCurseSummonDebuffAll.p->effects) {
+                       float baseMagn = eff->effectItem.magnitude < 1.f ? 0.1f : 10.f;
+                       if (eff->effectItem.magnitude > 140.f) baseMagn = 150.f;
+                       eff->effectItem.magnitude = baseMagn*curse*0.035f;
+                   }
+                   summon->AddSpell(arcaneCurseSummonDebuffHP.p); 
+                   summon->AddSpell(arcaneCurseSummonDebuffAll.p);
+               }
+           }
+       } 
+   }
+
+   void handle_cast_arcane_curse (RE::Actor* caster, RE::SpellItem *spell, bool dualCast)   // fires 3 times, 1 while casting and 2 after release
+   {
+       float amount = dualCast ? 1.5f : 0.7f;   // this func works for all actors who cast
+       if (spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) amount *= 0.5f;
+       if (spell->avEffectSetting && spell->avEffectSetting->GetMagickSkill() == RE::ActorValue::kConjuration) amount *= 4.f;
+       increase_arcane_curse (caster, amount);
    }
 
    void initGameplayData()
@@ -456,7 +514,7 @@ namespace gameplay
       bigs.emplace_back   (m_green_big.p);
       bigs.emplace_back   (m_blue_big.p);
 
-	  // bestiary [race;keyword] map
+      // bestiary [race;keyword] map
       bestiary_races_map.emplace(WolfRace.p->formID, BestiaryWolf.p);
       bestiary_races_map.emplace(FalmerRace.p->formID, BestiaryFalmer.p);
       bestiary_races_map.emplace(SprigganRace.p->formID, BestiarySpriggan.p);
