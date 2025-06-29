@@ -1,8 +1,18 @@
 {
-    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
-    "name": "mana-shield",
-    "version-string": "0.0.1",
+  "name": "templateplugin",
+  "version-string": "1.0.0",
+  "description": "Here should be description",
+  "homepage": "https://github.com/Ryan-rsm-McKenzie/ExamplePlugin-CommonLibSSE",
+  "license": "MIT",
   "dependencies": [
-    "commonlibsse-ng-se"
+    "boost-atomic",
+    "boost-stl-interfaces",
+    "glm",
+		"magic-enum",
+    "rsm-binary-io",
+    "simpleini",
+    "span-lite",
+    "spdlog",
+    "xbyak"
   ]
 }
