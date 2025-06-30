@@ -1,4 +1,4 @@
 
 This is the main dll plugin of the project Skyrim RfaD. 
 
-Plugin uses commonlibSSE
+This ver is based on Fenix314 TemplatePlugin and uses Fenix314 CommonLib SSE Fork.
