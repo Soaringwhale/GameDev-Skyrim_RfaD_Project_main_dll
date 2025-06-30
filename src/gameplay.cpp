@@ -402,7 +402,7 @@ namespace gameplay
           else if (actor->IsInFaction(ValleyGhostFaction.p))base->AddKeyword(BestiaryValleyGhost.p);
    }
 
-   void increase_arcane_curse (RE::Actor *caster, float amount)
+   void increase_arcane_curse (RE::Actor *caster, float amount)  // all actors
    {
        caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, amount);
        float curseAV = caster->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
@@ -414,18 +414,14 @@ namespace gameplay
            u_cast_on_self (arcaneCurseExpl.p, caster);
            caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -100.f);
        }
-       if (caster->IsPlayerRef()) {
-           caster->RemoveSpell(arcaneCurseRegenDebuff.p);
-           arcaneCurseRegenDebuff.p->effects[0]->effectItem.magnitude = curseAV*2.5f;
-           caster->AddSpell(arcaneCurseRegenDebuff.p);
-           // summons debuff
-           // damage of mobs explosion
-       }
    }
 
    void handle_player_arcane_curse (RE::Actor* pl)
    {
        float curse = pl->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
+       pl->RemoveSpell(arcaneCurseRegenDebuff.p);
+       arcaneCurseRegenDebuff.p->effects[0]->effectItem.magnitude = curse*2.5f;  // mp regen debuff
+       pl->AddSpell(arcaneCurseRegenDebuff.p);
        if (u_is_equipped(pl, grimoireDecurse.p)) {
            if (curse > 25.f)
            pl->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -1.f);
@@ -453,7 +449,7 @@ namespace gameplay
                    summon->AddSpell(arcaneCurseSummonDebuffAll.p);
                }
            }
-       } 
+       }
    }
 
    void handle_cast_arcane_curse (RE::Actor* caster, RE::SpellItem *spell, bool dualCast)   // fires 3 times, 1 while casting and 2 after release
