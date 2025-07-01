@@ -208,33 +208,12 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
 {
     // if (is_up) RE::DebugNotification(std::to_string(keyCode).c_str());        // to see pressed keycode in-game
 
-    //LOG("called handle_keyPress() with keycode - {}", keyCode);   //  TEMPORARY
-
     if (ui->IsMenuOpen(RE::Console::MENU_NAME)) return;    // opened console
 
     if (keyCode == 20 && !player->IsInCombat()) return;    // T out of combat
 
     if (keyCode == my::rightHandKeyCode)                   // pwatk double-hit fix
     {  
-        // tesak chrys stand attack
-        auto weap = u_get_weapon(player, false);
-        if (hold_time > 0.2f && hold_time < 0.6f && my::pwatk_state < 1) {
-            if (player->IsWeaponDrawn()) {
-               if (weap && weap->HasKeyword(my::chrysamereKW.p)) {   
-                   auto proc = player->currentProcess;   // pwAtk type check
-                   if (proc && proc->high) {
-                       if (proc->high->attackData.get()) {
-                           if (proc->high->attackData.get()->data.attackType == my::pwAtkTypeStanding.p) {
-                               my::pwatk_state = 1;
-                               u_cast_on_self(my::templarSwordFX.p, player);
-                               u_playSound(player, my::templarBeamStand.p, 85.f);
-                           }
-                       }
-                   }
-               }
-            }
-        }
-
         if (is_up)
         {
            attackKeyHolding = false;
@@ -243,9 +222,7 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
 
            if(player->HasMagicEffect(my::longStrideEff.p) || mys::dodge_timer > 1.f) mys::dodge_timer = 0;  
         }
-
         else if (hold_time > 0.2f) attackKeyHolding = true;
- 
     }
 
     if (keyCode == keyCodes.at(0))  // dodge
@@ -2114,9 +2091,9 @@ void on_spell_release (RE::ActorMagicCaster* this_, RE::MagicItem* magic_item)  
 
 bool on_check_cast (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dualCast)   // for ff spells works 1 time on casting and 2 times after release, always knows if dual cast.
 {                                                                                       // for conc spells works every second. Also works when eating food, potions etc
-    LOG("on_check_cast()");
-    if (auto caster = this_->actor) {
-        if (auto spell = mitem->As<RE::SpellItem>()) {
+    LOG("on_check_cast()");                                                             // works for shout to check kd, if force true we can shout even in kd
+    if (this_; auto caster = this_->actor) {
+        if (mitem; auto spell = mitem->As<RE::SpellItem>()) {
             if (!caster->IsCasting(spell)) return true;   // without isCasting check will work for spells when opening magic menu. With this still works for release and casting.
             gameplay::handle_cast_arcane_curse (caster, spell, dualCast);
         }     
@@ -2525,6 +2502,49 @@ void on_location_change (RE::TESObjectREFRPtr refHandle, RE::BGSLocation* oldLoc
     //auto refr  = refHandle.get();
     //auto actor = refr->As<RE::Actor>();
     //...
+}
+
+RE::BSEventNotifyControl on_key_input (const InputEvents* evns)
+{
+    if (!*evns) return RE::BSEventNotifyControl::kContinue;
+    for (RE::InputEvent *e = *evns;  e;  e = e->next)        //  начинаем идти по InputEvents пока евент (е) истинен
+    {            
+        switch (e->eventType.get()) {
+		case RE::INPUT_EVENT_TYPE::kButton:
+                RE::ButtonEvent* buttonEvent = e->AsButtonEvent();
+                if (buttonEvent && buttonEvent->HasIDCode())        //   && (buttonEvent->IsDown() || buttonEvent->IsPressed())
+                {
+                    uint32_t keyMask = buttonEvent->idCode;
+                    uint32_t keyCode;
+                    if (buttonEvent->device.get() == RE::INPUT_DEVICE::kMouse) {   // Mouse
+                        keyCode = Utils::kMacro_NumKeyboardKeys + keyMask;
+                    }
+                    else if (buttonEvent->device.get() == RE::INPUT_DEVICE::kGamepad) {   // Gamepad
+                        keyCode = Utils::GamepadMaskToKeycode(keyMask);  // for gamepad we need convert
+                    }
+                    else   // Keyboard
+                        keyCode = keyMask;  //  for keyboard, keymask == keycode
+
+                    if (keyCode >= Utils::kMaxMacros) continue;   // Valid scancode?
+
+                    float duration  = buttonEvent->heldDownSecs;
+                    //bool isPressed  = buttonEvent->value != 0 && duration >= 0;
+                    //bool isReleased = buttonEvent->value == 0 && duration != 0;
+                 
+                    if (keyCode != 17)        // for [W] 
+                        mys::handle_keyPress (keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
+
+                    //if (isPressed) {
+                        // ActionManager::GetSingleton()->OnKeyPressed(keyCode, duration);
+                        // if (Globals::ui->numPausesGame == 0 && Globals::p->GetActorRuntimeData().currentProcess)
+                        // ActionManager::GetSingleton()->EvaluateAndPerformActions();
+                    //} else if (isReleased) {
+                        // ActionManager::GetSingleton()->OnKeyReleased(keyCode);
+                    //}
+                }  
+        }
+    }
+    return RE::BSEventNotifyControl::kContinue;
 }
 
 void check_silver_oil (RE::Actor *pl, bool is_left, RE::AlchemyItem *oil)     // re-add silver_oil kw after game re-log 

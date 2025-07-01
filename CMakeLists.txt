@@ -90,8 +90,6 @@ set(SOURCES
     src/ItemCardFixer.cpp
     src/ActionManager.h
     src/ActionManager.cpp
-    src/InputWatcher.h
-    src/InputWatcher.cpp
     src/gameplay.h
     src/gameplay.cpp
     src/core.h

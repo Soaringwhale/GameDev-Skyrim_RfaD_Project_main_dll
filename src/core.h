@@ -4,6 +4,7 @@
 #include "RE/Skyrim.h"
 #include "GamePtr.h"
 
+using InputEvents = RE::InputEvent*;
 
 namespace my         
 {                
@@ -368,6 +369,8 @@ struct mys                        //  variables that can be used in all project 
     static void handle_keyPress(uint32_t keyCode, float hold_time, bool is_up, bool is_held);
 
 };
+
+RE::BSEventNotifyControl on_key_input (const InputEvents* evns);
 
 float on_physical_hit (RE::Actor* target, RE::HitData hit_data);
 

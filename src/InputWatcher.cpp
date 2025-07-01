@@ -7,17 +7,14 @@
 
 using namespace RE;
 
-BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)      //  обработка нажатий
+BSEventNotifyControl InputWatcher::ProcessEvent (const InputEvents* evns,  BSTEventSource<InputEvents>* dispatcher)      //  обработка нажатий
 {
     if (!*evns) return RE::BSEventNotifyControl::kContinue;
-
     for (InputEvent *e = *evns;  e;  e = e->next)        //  начинаем идти по InputEvents пока евент (е) истинен
     {            
         switch (e->eventType.get()) {
             case INPUT_EVENT_TYPE::kButton:
-
                 ButtonEvent* buttonEvent = e->AsButtonEvent();
-
                 if (buttonEvent && buttonEvent->HasIDCode())        //   && (buttonEvent->IsDown() || buttonEvent->IsPressed())
                 {
                     uint32_t keyMask = buttonEvent->idCode;
@@ -41,11 +38,9 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
                     float duration  = buttonEvent->heldDownSecs;
                     //bool isPressed  = buttonEvent->value != 0 && duration >= 0;
                     //bool isReleased = buttonEvent->value == 0 && duration != 0;
-
-                    
+                 
                     if (keyCode != 17)        // for [W] 
-                        mys::handle_keyPress(keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
-                    
+                        mys::handle_keyPress (keyCode, duration, buttonEvent->IsUp(), buttonEvent->IsHeld());
 
                     //if (isPressed) {
                         // ActionManager::GetSingleton()->OnKeyPressed(keyCode, duration);
@@ -57,6 +52,5 @@ BSEventNotifyControl  InputWatcher::ProcessEvent (const InputEvents* evns,  BSTE
                 }  
         }
     }
-
     return BSEventNotifyControl::kContinue;
 }

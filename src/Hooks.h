@@ -371,16 +371,16 @@ namespace hooks
 
     class OnCheckCast_Hook   //  virt. ActorMagicCaster::CheckCast()    //  for ff spells works 1 time on casting and 2 times after release, always knows if dual cast.
     {                                                                   //  for conc spells works every second.  Also works when eating food, potions etc
-      public:
+      public:                                                           //  works for shout to check kd, if force true we can shout even in kd
         static void install_hook()    {
             old_func = REL::Relocation<uintptr_t>(RE::VTABLE_ActorMagicCaster[0]).write_vfunc(0xA, new_func);
         }
       private:
         static bool new_func (RE::ActorMagicCaster* this_, RE::MagicItem* spell, bool dualCast, float* alchStrength, RE::MagicSystem::CannotCastReason* reason, bool useBaseValueForCost)
         {
-            if (this_ && spell) 
-                return on_check_cast (this_, spell, dualCast);
-            return old_func (this_, spell, dualCast, alchStrength, reason, useBaseValueForCost);
+            if (on_check_cast (this_, spell, dualCast)) // our checks and logic
+                return old_func (this_, spell, dualCast, alchStrength, reason, useBaseValueForCost); // game checks
+            else return false;  // now allow cast from our side
         }
         static inline REL::Relocation<decltype(new_func)> old_func;
     };

@@ -4,7 +4,6 @@
 
 #include "Hooks.h"
 #include "Events.h"
-#include "InputWatcher.h"
 #include "ui.h"
 
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query (const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
@@ -105,6 +104,7 @@ void events::register_for_events()
     OnDeathEvent::GetSingleton()->register_();              // death event
     OnActivateEvent::GetSingleton()->register_();           // activate event
     MenuOpenCloseEventSink::GetSingleton()->register_();    // open/close menu event
+    InputEvent::GetSingleton()->register_();                // inputs
     // LocationChangeEvent::GetSingleton()->register_();    // location change event
     // ActorCellEvent::GetSingleton()->register_();         // cell change event (player only)
     // CellAttachDetachEvent::GetSingleton()->register_();  // cell refs init when enter new cell
@@ -122,7 +122,6 @@ static void SKSEMessageHandler (SKSE::MessagingInterface::Message* message)
         hooks::install_hooks();
         description_hooks::Install_Hooks();
         events::register_for_events();
-        InputWatcher::GetSingleton()->register_();   // key press event
         UISettings::get_singleton().load_From_INI();
         RfadWidget::register_();
         break;

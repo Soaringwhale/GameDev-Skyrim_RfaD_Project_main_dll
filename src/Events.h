@@ -5,7 +5,7 @@
 
 namespace events
 {
-    void register_for_events();
+    void register_for_events();  // register all needed events in main
 
     using ActorKillev = RE::ActorKill::Event;
     class OnDeathEvent : public RE::BSTEventSink<ActorKillev>  // death event
@@ -140,7 +140,7 @@ namespace events
         }
     };
 
-    //--------------------------------------------------------------- open/close menues event listen ----------------------------------------------------------------------
+    //---------------------------------------------------------------------------- open/close menues event listen ------------------------------------------------------
     class MenuOpenCloseEventSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
     {
       public:
@@ -156,6 +156,25 @@ namespace events
             RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
         }
     };
+    //------------------------------------------------------------ input event listen ----------------------------------------------------------------------
+    class  InputEvent : public RE::BSTEventSink<InputEvents>
+    {
+      public:
+        virtual RE::BSEventNotifyControl ProcessEvent (const InputEvents* evns,	RE::BSTEventSource<InputEvents>* dispatcher) override {
+            return on_key_input(evns); 
+        }
+        //TES_HEAP_REDEFINE_NEW();
+
+        static InputEvent* GetSingleton() { 
+            static InputEvent singleton;
+            return std::addressof(singleton);
+        }
+        void register_()  {                          // register for event
+            RE::BSInputDeviceManager::GetSingleton()->AddEventSink(this);
+        }
+    };
 };
+
+
 
 
