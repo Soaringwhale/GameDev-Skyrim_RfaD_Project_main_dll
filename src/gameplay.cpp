@@ -375,7 +375,7 @@ namespace gameplay
 
    void check_bestiary (RE::Actor* actor)  // adds bestiary keywords to generic npc   (TO GAMEPLAY)
    {
-          LOG("called check_bestiary()");
+          LOG("called check_bestiary() for - {}", actor->GetName());
           
           auto race_id = actor->GetRace()->formID;
           auto base = actor->GetActorBase();
@@ -409,7 +409,8 @@ namespace gameplay
        if (curseAV >= 100.f) {
            float maxHP = u_get_actor_value_max(caster, RE::ActorValue::kHealth);
            float dmg = (caster->IsPlayerRef()) ? maxHP*0.5f : maxHP * 0.08f;
-           if (u_is_equipped(caster, grimoireMagDmgOnHit.p)) dmg = maxHP*0.3f;
+           if (u_is_equipped(caster, grimoireConvertInc.p) || 
+               u_is_equipped(caster, grimoireMagDmgOnHit.p)) dmg = maxHP*0.3f;
            caster->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
            u_cast_on_self (arcaneCurseExpl.p, caster);
            caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -100.f);
@@ -452,12 +453,12 @@ namespace gameplay
        }
    }
 
-   void handle_cast_arcane_curse (RE::Actor* caster, RE::SpellItem *spell, bool dualCast)   // fires 3 times, 1 while casting and 2 after release
-   {
-       float amount = dualCast ? 1.5f : 0.7f;   // this func works for all actors who cast
+   void handle_cast_arcane_curse (RE::Actor* caster, RE::SpellItem *spell, bool dualCast)   // works for all actors who cast. fires 3 times, 1 while casting and 2 after release
+   {  
+       float amount = dualCast ? 1.5f : 0.7f;
        if (spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) amount *= 0.5f;
        if (spell->avEffectSetting && spell->avEffectSetting->GetMagickSkill() == RE::ActorValue::kConjuration) amount *= 4.f;
-       increase_arcane_curse (caster, amount);
+       increase_arcane_curse (caster, amount); 
    }
 
    void initGameplayData()

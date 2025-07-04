@@ -8,6 +8,7 @@
 #include "SimpleIni.h"
 
 
+
 RE::BSEventNotifyControl events::MenuOpenCloseEventSink::ProcessEvent (const RE::MenuOpenCloseEvent* ev, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)  // catch menues open/close
 {
 
@@ -93,7 +94,7 @@ RfadWidget::RfadWidget()    // ctor
 {
     // auto scale_form_manager = RE::BSScaleformManager::GetSingleton();
 
-    LOG ("Called c-tor");
+    LOG ("RfadWidget() called c-tor");
 
     inputContext = Context::kNone;
     depthPriority = 0;
@@ -117,7 +118,7 @@ RfadWidget::RfadWidget()    // ctor
         scaleform->LoadMovie(this, this->uiMovie, MENU_PATH);
     }
 
-    LOG("Finished c-tor");
+    LOG("RfadWidget() finished c-tor");
 }
 
 void RfadWidget::register_()
@@ -255,13 +256,14 @@ float RfadWidget::av_total_regen_value (const RE::ActorValue av, const RE::Actor
     return restore_value_counter + regeneration;
 }
 
-static bool _blinker = false; 
+static int updater = 0;
 
 void RfadWidget::update()
 {
-    _blinker = !_blinker;  // for every 2 update
-    if (_blinker) return;
     if (mys::widget_shown->value == 0) return;
+    updater++;
+    if (updater < 10) return;    // every 10 update   // ~  6 times / sec
+    else updater = 0;
 
     auto ui = RE::UI::GetSingleton();
     if (!ui || ui->GameIsPaused())  return;
@@ -284,19 +286,24 @@ void RfadWidget::update()
     string mp_view_str = std::to_string(int(pl->GetActorValue(RE::ActorValue::kMagicka))) + string("/") +
                          std::to_string(int(u_get_actor_value_max(pl, RE::ActorValue::kMagicka)));
 
+    string arcaneCurseAmountStr = std::to_string(int(pl->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance)));   // arcane curse
+
     const RE::GFxValue health_regen  {hp_regen_str};
     const RE::GFxValue stamina_regen {st_regen_str};
     const RE::GFxValue magicka_regen {mp_regen_str};
     const RE::GFxValue value_health  {hp_view_str};
     const RE::GFxValue value_stamina {st_view_str};
     const RE::GFxValue value_magicka {mp_view_str};
+    const RE::GFxValue arcaneCurseAmount {arcaneCurseAmountStr};
 
-    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setHealthText", nullptr, &health_regen, 1);     // 
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setHealthText", nullptr, &health_regen, 1);      // invoke - прокидываем значение в swf и вызываем функцию из ActionScript
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setStaminaText", nullptr, &stamina_regen, 1);
-    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setMagickaText", nullptr, &magicka_regen, 1);                 //  методы из ActionScript, вызываемые у frame1
-    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueHealthText", nullptr, &value_health, 1);              //  (т.к. у нас нет анимаций, текст это всего 1 кадр который обновляется)
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setMagickaText", nullptr, &magicka_regen, 1);               //  методы из ActionScript, вызываемые у frame1
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueHealthText", nullptr, &value_health, 1);            //  (т.к. у нас нет анимаций, текст это всего 1 кадр который обновляется)
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueStaminaText", nullptr, &value_stamina, 1);
     Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.setValueMagickaText", nullptr, &value_magicka, 1);
+
+    Rfad_widget->uiMovie->Invoke ("rfadwidgetframe1.updateArcaneFatigueValue", nullptr, &arcaneCurseAmount, 1);
 
     apply_layout (Rfad_widget);
 }
@@ -309,21 +316,23 @@ void RfadWidget::apply_layout (const RE::GPtr<RE::IMenu>& Rfad_widget)      // �
 
     auto settings = UISettings::get_singleton();
 
-    const RE::GFxValue scale = settings.scale();
+    const RE::GFxValue scale = settings.scale_;
+    const RE::GFxValue pos_regen_hp_x = settings.hp_regen_pos_x;
+    const RE::GFxValue pos_regen_hp_y = settings.hp_regen_pos_y;
+    const RE::GFxValue pos_regen_st_x = settings.st_regen_pos_x;
+    const RE::GFxValue pos_regen_st_y = settings.st_regen_pos_y;
+    const RE::GFxValue pos_regen_mp_x = settings.mp_regen_pos_x;
+    const RE::GFxValue pos_regen_mp_y = settings.mp_regen_pos_y;
+    const RE::GFxValue pos_hp_x = settings.hp_pos_x;
+    const RE::GFxValue pos_hp_y = settings.hp_pos_y;
+    const RE::GFxValue pos_st_x = settings.st_pos_x;
+    const RE::GFxValue pos_st_y = settings.st_pos_y;
+    const RE::GFxValue pos_mp_x = settings.mp_pos_x;
+    const RE::GFxValue pos_mp_y = settings.mp_pos_y;   // numbers on bars
 
-    const RE::GFxValue pos_regen_hp_x = settings.get_hp_regen_pos_x();
-    const RE::GFxValue pos_regen_hp_y = settings.get_hp_regen_pos_y();
-    const RE::GFxValue pos_regen_st_x = settings.get_st_regen_pos_x();
-    const RE::GFxValue pos_regen_st_y = settings.get_st_regen_pos_y();
-    const RE::GFxValue pos_regen_mp_x = settings.get_mp_regen_pos_x();
-    const RE::GFxValue pos_regen_mp_y = settings.get_mp_regen_pos_y();
-
-    const RE::GFxValue pos_hp_x = settings.get_hp_pos_x();
-    const RE::GFxValue pos_hp_y = settings.get_hp_pos_y();
-    const RE::GFxValue pos_st_x = settings.get_st_pos_x();
-    const RE::GFxValue pos_st_y = settings.get_st_pos_y();
-    const RE::GFxValue pos_mp_x = settings.get_mp_pos_x();
-    const RE::GFxValue pos_mp_y = settings.get_mp_pos_y();
+    const RE::GFxValue pos_ac_x = settings.ac_pos_x;   // arcane curse art pos
+    const RE::GFxValue pos_ac_y = settings.ac_pos_y;
+    const RE::GFxValue ac_scale = settings.ac_scale;
 
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setHealthY", nullptr, &pos_regen_hp_y, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setHealthX", nullptr, &pos_regen_hp_x, 1);
@@ -331,16 +340,18 @@ void RfadWidget::apply_layout (const RE::GPtr<RE::IMenu>& Rfad_widget)      // �
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setStaminaX", nullptr, &pos_regen_st_x, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setMagickaY", nullptr, &pos_regen_mp_y, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setMagickaX", nullptr, &pos_regen_mp_x, 1);
-
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueHealthY", nullptr, &pos_hp_y, 1);   
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueHealthX", nullptr, &pos_hp_x, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueStaminaY", nullptr, &pos_st_y, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueStaminaX", nullptr, &pos_st_x, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueMagickaY", nullptr, &pos_mp_y, 1);
     Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueMagickaX", nullptr, &pos_mp_x, 1);
-
     Rfad_widget->uiMovie->SetVariable("rfadwidgetframe1._xscale", scale);
     Rfad_widget->uiMovie->SetVariable("rfadwidgetframe1._yscale", scale);
+
+    Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueArcaneCurseX", nullptr, &pos_ac_x, 1);
+    Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setValueArcaneCurseY", nullptr, &pos_ac_y, 1);
+    Rfad_widget->uiMovie->Invoke("rfadwidgetframe1.setArcaneCurseScale",  nullptr, &ac_scale, 1);
 }
 
 void RfadWidget::AdvanceMovie (const float interval, const uint32_t current_time) 
@@ -371,6 +382,10 @@ void UISettings::load_From_INI()  // using SimpleIni.h
         constexpr auto f_pos_value_magicka_y = L"fPosValueMagickaY";
         constexpr auto f_scale_widget = L"fScaleWidget";
 
+        constexpr auto f_pos_arcane_curse_x = L"fPosArcaneCurseX";
+        constexpr auto f_pos_arcane_curse_y = L"fPosArcaneCurseY";
+        constexpr auto f_scale_arcane_curse = L"fScaleArcaneCurseWidget";
+
         auto read_double = [this](const CSimpleIni& ini, const wchar_t* key, double& value) -> void
         {
             if (ini.GetValue(section, key)) {
@@ -389,15 +404,17 @@ void UISettings::load_From_INI()  // using SimpleIni.h
             read_double (ini, f_pos_regen_stamina_y, st_regen_pos_y);
             read_double (ini, f_pos_regen_magicka_x, mp_regen_pos_x);
             read_double (ini, f_pos_regen_magicka_y, mp_regen_pos_y);
-
             read_double (ini, f_pos_value_health_x, hp_pos_x);
             read_double (ini, f_pos_value_health_y, hp_pos_y);
             read_double (ini, f_pos_value_stamina_x, st_pos_x);
             read_double (ini, f_pos_value_stamina_y, st_pos_y);
             read_double (ini, f_pos_value_magicka_x, mp_pos_x);
             read_double (ini, f_pos_value_magicka_y, mp_pos_y);
+            read_double (ini, f_scale_widget, scale_);
 
-            read_double(ini, f_scale_widget, scale_);
+            read_double (ini, f_pos_arcane_curse_x, ac_pos_x);
+            read_double (ini, f_pos_arcane_curse_y, ac_pos_y);
+            read_double (ini, f_scale_arcane_curse, ac_scale);
         };
 
         CSimpleIni ini;

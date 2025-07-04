@@ -128,6 +128,7 @@ namespace gameplay
     static GamePtr<RE::TESObjectARMO> grimoireMagDmgOnHit  (0xD9C, "Requiem for a Dream - ArcaneCurse.esp");
     static GamePtr<RE::TESObjectARMO> grimoireDecurse (0xD9A, "Requiem for a Dream - ArcaneCurse.esp");
     static GamePtr<RE::TESObjectARMO> grimoireMagFury (0xD8E, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::TESObjectARMO> grimoireConvertInc (0xD8F, "Requiem for a Dream - ArcaneCurse.esp");
     
     static RE::SpellItem* oil_diseaseOnHit;
     static RE::SpellItem* oil_igniteOnHit1;

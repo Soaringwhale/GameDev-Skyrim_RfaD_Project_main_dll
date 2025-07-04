@@ -129,6 +129,7 @@ static void SKSEMessageHandler (SKSE::MessagingInterface::Message* message)
         //my::sf_handle_reserved_MP();
         //UISettings::get_singleton().load_From_INI();   // reload ui settings
         //handle_numbers_widget ();
+		UISettings::get_singleton().load_From_INI();
         break;
     case SKSE::MessagingInterface::kPreLoadGame:         
         log_pre_load_game(mys::player);  // Log just before savegame loads

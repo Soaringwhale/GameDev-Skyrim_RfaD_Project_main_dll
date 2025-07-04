@@ -24,7 +24,7 @@ class RfadWidget : public RE::IMenu
     // static auto creator() -> RE::stl::owner<RE::IMenu*> { return new RfadWidget(); }
     static RE::IMenu* creator() { return new RfadWidget(); }
 
-    auto AdvanceMovie (float interval, uint32_t current_time) -> void override;
+    void AdvanceMovie (float interval, uint32_t current_time)  override;
 
 };
 
@@ -32,31 +32,13 @@ class RfadWidget : public RE::IMenu
 
 struct UISettings
 {
-  public:
-     auto scale() const -> double { return scale_; }
-
-     auto get_hp_regen_pos_x() const -> double { return hp_regen_pos_x; }
-     auto get_hp_regen_pos_y() const -> double { return hp_regen_pos_y; }
-     auto get_st_regen_pos_x() const -> double { return st_regen_pos_x; }
-     auto get_st_regen_pos_y() const -> double { return st_regen_pos_y; }
-     auto get_mp_regen_pos_x() const -> double { return mp_regen_pos_x; }
-     auto get_mp_regen_pos_y() const -> double { return mp_regen_pos_y; }  // getters
-
-     auto get_hp_pos_x() const -> double { return hp_pos_x; }
-     auto get_hp_pos_y() const -> double { return hp_pos_y; }
-     auto get_st_pos_x() const -> double { return st_pos_x; }
-     auto get_st_pos_y() const -> double { return st_pos_y; }
-     auto get_mp_pos_x() const -> double { return mp_pos_x; }
-     auto get_mp_pos_y() const -> double { return mp_pos_y; }
-
     [[nodiscard]] static auto get_singleton() noexcept -> UISettings& {
-         static UISettings instance;
+        static UISettings instance;
         return instance;
     }
 
     void load_From_INI();   // read from ini to fields
 
-  private:
     UISettings() = default;
 
     double scale_{100.};
@@ -66,12 +48,15 @@ struct UISettings
     double st_regen_pos_x {210.};
     double st_regen_pos_y {660.};
     double mp_regen_pos_x {210.};
-    double mp_regen_pos_y {630.};  // fields
-
+    double mp_regen_pos_y {630.};  // numbers on bars fields + default values
     double hp_pos_x {110.};
     double hp_pos_y {600.};
     double st_pos_x {110.};
     double st_pos_y {660.};
     double mp_pos_x {110.};
     double mp_pos_y {630.};
+
+    double ac_pos_x {45.};      // arcane curse
+    double ac_pos_y {600.};
+    double ac_scale {100.};
 };

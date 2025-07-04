@@ -1790,7 +1790,7 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
               ///}
         }
         else{
-            if (!target->IsPlayerRef()) gameplay::check_bestiary(target);
+            if (!target->IsPlayerRef() && target->GetActorBase() && !target->GetActorBase()->numKeywords) gameplay::check_bestiary(target);
         }
         
         if (baseEff->HasKeyword(my::dll_check_KW.p))
@@ -2094,7 +2094,8 @@ bool on_check_cast (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dual
     LOG("on_check_cast()");                                                             // works for shout to check kd, if force true we can shout even in kd
     if (this_; auto caster = this_->actor) {
         if (mitem; auto spell = mitem->As<RE::SpellItem>()) {
-            if (!caster->IsCasting(spell)) return true;   // without isCasting check will work for spells when opening magic menu. With this still works for release and casting.
+            if (mitem->GetSpellType() != RE::MagicSystem::SpellType::kSpell) return true;   // not power, ability, voice, scroll etc
+            if (!caster->IsCasting(spell)) return true;   // without isCasting check will work for spells when opening magic menu. With this check still works for release and casting.
             gameplay::handle_cast_arcane_curse (caster, spell, dualCast);
         }     
     }
@@ -2110,6 +2111,7 @@ float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const 
 
 void on_jump (RE::Actor *actor)
 {
+    LOG("called on_jump()");
     actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -12.f);
     if (actor->HasSpell(my::meditationSpell.p)) actor->RemoveSpell(my::meditationSpell.p);
     my::meditateState = false;
@@ -2133,12 +2135,12 @@ bool can_be_passed_mech (RE::TESBoundObject* obj)  // only items can be given / 
 
 bool on_remove_item_from_actor (RE::Character *actor, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont)
 {
-    LOG("on_remove_item_from_actor()");  // this func 
+    LOG("on_remove_item_from_actor()");
     if (targetCont) {
-        auto toActor = targetCont->As<RE::Actor>();
+        auto toActor = targetCont->As<RE::Actor>();   // give to actor-mech
         if (toActor && toActor->GetActorBase() && toActor->GetActorBase()->HasKeyword(my::playersAutomaton.p)) return can_be_passed_mech (item);
     }
-    if (actor && actor->GetActorBase()) {
+    if (actor && actor->GetActorBase()) {   // take from actor-mech
         if (actor->GetActorBase()->HasKeyword(my::playersAutomaton.p) && targetCont) return can_be_passed_mech (item);
     }
         
@@ -2286,7 +2288,6 @@ void log_game_info (RE::Actor* pl, bool load, bool death, RE::Actor* killer, boo
     }
 
     string info = "[" + logFileLines[1] + "] ";
-    
     
     if      (death)   info += "DEATH; ";
     else if (load)    info += "LOAD";
