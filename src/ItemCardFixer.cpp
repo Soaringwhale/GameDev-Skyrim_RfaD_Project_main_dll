@@ -7,6 +7,7 @@
 void ItemCardFixer::handleEffects()       // именно здесь происходит замена описания, подменяя поле "effects". Иммерсивное описание в самой шмотке тоже хранится в них
 {
     //SKSE::log::info("called handleEffects() from fixer.cpp");
+
     auto effectsStr = std::string("");
     RE::GFxValue effects;
     itemInfo.GetMember("effects", &effects);
@@ -50,7 +51,7 @@ void ItemCardFixer::handleSoulLVL()
     itemInfo.SetMember(ItemCardFixer::typeVar, ItemCardType::ICT_BOOK);
 }
 
-void ItemCardFixer::fixHTML(const char* a_displayVariable, const char* a_descriptionVariable)
+void ItemCardFixer::fixHTML (const char* a_displayVariable, const char* a_descriptionVariable)
 {
     RE::GFxValue displayLabel;
     RE::GFxValue descriptionLabel;
@@ -355,22 +356,22 @@ void ItemCardFixer::applyDescription()
 {
     //logger::info("called applyDescription() for description - {} and item with type - {}", description, type);
     switch (type) {
-    case ICT_ARMOR:  { handleArmor();  break; }
-    case ICT_WEAPON: { handleWeapon(); break; }
-    case ICT_MISC:      { handleMisc();   break; }
-    case ICT_BOOK:   { handleBook();   break; }
-    case ICT_FOOD:   { handleFood();   break; }
-    case ICT_POTION: { handlePotion(); break; }
-    case ICT_SPELL:  { handleSpell();  break; }
+    case ICT_ARMOR:         { handleArmor();        break; }
+    case ICT_WEAPON:        { handleWeapon();       break; }
+    case ICT_MISC:          { handleMisc();         break; }
+    case ICT_BOOK:          { handleBook();         break; }
+    case ICT_FOOD:          { handleFood();         break; }
+    case ICT_POTION:        { handlePotion();       break; }
+    case ICT_SPELL:         { handleSpell();        break; }
     case ICT_INGREDIENT:    { handleIngredient();   break; }
     case ICT_KEY:           { handleKey();          break; }
-    case ICT_SHOUT:         { handleShout();         break; }
-    case ICT_ACTIVE_EFFECT: { handleActiveEffect();    break; }
+    case ICT_SHOUT:         { handleShout();        break; }
+    case ICT_ACTIVE_EFFECT: { handleActiveEffect(); break; }
     case ICT_SOUL_GEMS:     { handleSoulGems();     break; }
-    case ICT_SPELL_DEFAULT:    { handleSpellDefault();    break; }
+    case ICT_SPELL_DEFAULT: { handleSpellDefault(); break; }
     case ICT_LIST:          { handleList();         break; }
-    case ICT_CRAFT_ENCHANTING:    { handleCraftEnchanting(); break; }
-    case ICT_HOUSE_PART:        { handleHousePart(); break;    }
+    case ICT_CRAFT_ENCHANTING:  { handleCraftEnchanting(); break; }
+    case ICT_HOUSE_PART:        { handleHousePart();       break; }
     }
 }
 
@@ -386,10 +387,10 @@ void ItemCardFixer::fixItemCard()
     case ICT_POTION:     { fixPotion();  break; }
     case ICT_SPELL:      { fixSpell();   break; }
     case ICT_INGREDIENT: { fixIngredient();    break; }
-    case ICT_KEY:         { fixKey();        break; }
+    case ICT_KEY:        { fixKey();        break; }
     case ICT_SHOUT:      { fixShout();        break; }
-    case ICT_ACTIVE_EFFECT:       { fixActiveEffect(); break; }
-    case ICT_SOUL_GEMS:           { fixSoulGems();     break; }
+    case ICT_ACTIVE_EFFECT:    { fixActiveEffect(); break; }
+    case ICT_SOUL_GEMS:        { fixSoulGems();     break; }
     case ICT_SPELL_DEFAULT:    { fixSpellDefault(); break; }
     case ICT_LIST:             { fixList();         break;    }
     case ICT_CRAFT_ENCHANTING: { fixCraftEnchanting(); break;}

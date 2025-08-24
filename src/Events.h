@@ -7,29 +7,48 @@ namespace events
 {
     void register_for_events();  // register all needed events in main
 
+
     using ActorKillev = RE::ActorKill::Event;
-    class OnDeathEvent : public RE::BSTEventSink<ActorKillev>  // death event
+    class OnKillEvent : public RE::BSTEventSink<ActorKillev>    // [kill event]
     {
-    public:
-        virtual RE::BSEventNotifyControl ProcessEvent(const ActorKillev* evn, RE::BSTEventSource<ActorKillev>*) override
+      public:
+        virtual RE::BSEventNotifyControl ProcessEvent (const ActorKillev* evn, RE::BSTEventSource<ActorKillev>*) override
         {
-            on_death(evn->victim, evn->killer);
+            on_kill (evn->victim, evn->killer);
             return RE::BSEventNotifyControl::kContinue;  // must be at the end of ProcessEvent()
         }
-        static OnDeathEvent* GetSingleton()
+        static OnKillEvent* GetSingleton()  {
+            static OnKillEvent singleton;
+            return std::addressof(singleton);
+        }
+        void register_() { //  register event listening
+            RE::ActorKill::GetEventSource()->AddEventSink(this);
+        }
+    };
+
+    class OnDeathEvent : public RE::BSTEventSink<RE::TESDeathEvent>   // [death event]  (dying)
+    {
+      public:
+        virtual RE::BSEventNotifyControl ProcessEvent (const RE::TESDeathEvent* evn, RE::BSTEventSource<RE::TESDeathEvent>*) override
         {
+            if (evn && !evn->dead) {
+                if (auto refr = evn->actorDying.get(); refr && refr->As<RE::Actor>())
+                    on_dying(refr->As<RE::Actor>());  // before dead
+            }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+        static OnDeathEvent* GetSingleton() {
             static OnDeathEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()  //  register event listening
-        {
-            RE::ActorKill::GetEventSource()->AddEventSink(this);
+        void register_(){
+            RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESDeathEvent>()->AddEventSink(this);
         }
     };
 
     class OnActivateEvent : public RE::BSTEventSink<RE::TESActivateEvent>  // activate event
     {
-    public:
+      public:
         virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESActivateEvent* evn,    RE::BSTEventSource<RE::TESActivateEvent>*) override    {
             on_activate(evn->actionRef, evn->objectActivated);
             return RE::BSEventNotifyControl::kContinue;
@@ -39,15 +58,14 @@ namespace events
             static OnActivateEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()
-        {
+        void register_(){
             RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESActivateEvent>()->AddEventSink(this);
         }
     };
 
     class LocationChangeEvent :    public RE::BSTEventSink<RE::TESActorLocationChangeEvent>  // change location event  (won't be called when changing cells of same location)
     {
-    public:
+      public:
         virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESActorLocationChangeEvent* evn,    RE::BSTEventSource<RE::TESActorLocationChangeEvent>*) override
         {
             on_location_change(evn->actor, evn->oldLoc, evn->newLoc);
@@ -58,15 +76,14 @@ namespace events
             static LocationChangeEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()
-        {
+        void register_() {
             RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESActorLocationChangeEvent>()->AddEventSink(this);
         }
     };
 
     class ActorCellEvent : public RE::BSTEventSink<RE::BGSActorCellEvent>  // player enters another cell
     {
-    public:
+      public:
         virtual RE::BSEventNotifyControl ProcessEvent(const RE::BGSActorCellEvent* evn,    RE::BSTEventSource<RE::BGSActorCellEvent>*) override
         {
             bool leave = evn->flags.any(RE::BGSActorCellEvent::CellFlag::kLeave);
@@ -96,8 +113,7 @@ namespace events
             static CellAttachDetachEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()
-        {
+        void register_() {
             RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESCellAttachDetachEvent>()->AddEventSink(this);
         }
     };
@@ -115,8 +131,7 @@ namespace events
             static CellFullyLoadedEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()
-        {
+        void register_() {
             RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESCellFullyLoadedEvent>()->AddEventSink(this);
         }
     };
@@ -134,11 +149,30 @@ namespace events
             static ObjectLoadedEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()
-        {
+        void register_() {
             RE::ScriptEventSourceHolder::GetSingleton()->GetEventSource<RE::TESObjectLoadedEvent>()->AddEventSink(this);
         }
     };
+
+    class OnCrosshairRefEvent : public RE::BSTEventSink<SKSE::CrosshairRefEvent>     //  reference under cursor 
+	{
+      public:
+        RE::BSEventNotifyControl ProcessEvent (const SKSE::CrosshairRefEvent* event, RE::BSTEventSource<SKSE::CrosshairRefEvent>*)
+        {
+            if (event->crosshairRef) {
+                // logger::info("Crosshair is over {}", event->crosshairRef->GetBaseObject()->GetName());
+            }
+            return RE::BSEventNotifyControl::kContinue;
+        }
+        static OnCrosshairRefEvent* GetSingleton() {
+            static OnCrosshairRefEvent singleton;
+            return std::addressof(singleton);
+        }
+        void register_()  // register for catching menues open/close
+        {
+            SKSE::GetCrosshairRefEventSource()->AddEventSink(this);
+        }
+	};
 
     //---------------------------------------------------------------------------- open/close menues event listen ------------------------------------------------------
     class MenuOpenCloseEventSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
@@ -156,7 +190,9 @@ namespace events
             RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(this);
         }
     };
-    //------------------------------------------------------------ input event listen ----------------------------------------------------------------------
+	
+    //-------------------------------------------------------------------- input event listen ----------------------------------------------------------------------
+	using InputEvents = RE::InputEvent*;
     class  InputEvent : public RE::BSTEventSink<InputEvents>
     {
       public:
@@ -169,8 +205,29 @@ namespace events
             static InputEvent singleton;
             return std::addressof(singleton);
         }
-        void register_()  {                          // register for event
+        void register_()  { 
             RE::BSInputDeviceManager::GetSingleton()->AddEventSink(this);
+        }
+    };
+
+    //--------------------------------------------------------------------------- custom events ------------------------------------------------------
+    class OnCustomEvents : public RE::BSTEventSink<SKSE::ModCallbackEvent>
+    {
+      public:
+        RE::BSEventNotifyControl ProcessEvent (const SKSE::ModCallbackEvent* evn, RE::BSTEventSource<SKSE::ModCallbackEvent>*)  // from flash, papyrus etc.
+        {
+			if (!evn) return RE::BSEventNotifyControl::kContinue;
+			if (evn->eventName == "RFAD_DescriptionButtonClick") {
+                on_ui_descr_button (evn->numArg);   //   custom event from flash (swf) with numeric arg
+            } 
+			return RE::BSEventNotifyControl::kContinue;
+        }
+        static OnCustomEvents* GetSingleton() {
+            static OnCustomEvents singleton;
+            return std::addressof(singleton);
+        }
+        void register_() {
+            SKSE::GetModCallbackEventSource()->AddEventSink(this);
         }
     };
 };

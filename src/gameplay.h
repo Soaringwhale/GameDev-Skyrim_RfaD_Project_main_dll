@@ -105,6 +105,18 @@ namespace gameplay
     static GamePtr<RE::BGSPerk> unarmed_20 (0xEF222, "IW_Unarmed_Perktree.esp");
     static GamePtr<RE::BGSPerk> unarmed_50 (0xEF223, "IW_Unarmed_Perktree.esp");
     static GamePtr<RE::BGSPerk> unarmed_80 (0xEF224, "IW_Unarmed_Perktree.esp");
+    // mechanist
+    static GamePtr<RE::TESGlobal>  currentSummonedSpace (0xE14015, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> automaton (0xD1196C, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> deploy1Space (0xE14016, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> deploy2Space (0xE14017, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> deploy3Space (0xE14018, "RfaD SSE - Awaken.esp");     
+    static GamePtr<RE::BGSKeyword> deploy4Space (0xE14019, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> deploy5Space (0xE1401A, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSPerk> mech_25  (0x636C0, "RFAD_IW_Mechanist.esp");
+    static GamePtr<RE::BGSPerk> mech_50  (0x636C1, "RFAD_IW_Mechanist.esp");
+    static GamePtr<RE::BGSPerk> mech_75  (0x636C2, "RFAD_IW_Mechanist.esp");
+    static GamePtr<RE::BGSPerk> mech_100 (0x636C3, "RFAD_IW_Mechanist.esp");
     // oil
     static GamePtr<RE::SpellItem> silverDust1 (0xFA4B56, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> silverDust2 (0x5DC480, "RfaD SSE - Awaken.esp");
@@ -121,14 +133,23 @@ namespace gameplay
 
     static GamePtr<RE::TESGlobal> bossFightID (0x1C7FFB, "RfaD SSE - Awaken.esp");
 
+    // ac + grimoire
     static GamePtr<RE::SpellItem> arcaneCurseExpl (0xDAA, "Requiem for a Dream - ArcaneCurse.esp");
     static GamePtr<RE::SpellItem> arcaneCurseRegenDebuff (0x808, "Requiem for a Dream - ArcaneCurse.esp");
     static GamePtr<RE::SpellItem> arcaneCurseSummonDebuffHP  (0xD810E9, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> arcaneCurseSummonDebuffAll (0xD810EB, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::TESObjectARMO> chemistPotions (0xD8B314, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESObjectARMO> grimoireMagDmgOnHit  (0xD9C, "Requiem for a Dream - ArcaneCurse.esp");
-    static GamePtr<RE::TESObjectARMO> grimoireDecurse (0xD9A, "Requiem for a Dream - ArcaneCurse.esp");
-    static GamePtr<RE::TESObjectARMO> grimoireMagFury (0xD8E, "Requiem for a Dream - ArcaneCurse.esp");
-    static GamePtr<RE::TESObjectARMO> grimoireConvertInc (0xD8F, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::TESObjectARMO> grimoireDecurse      (0xD9A, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::TESObjectARMO> grimoireMagFury      (0xD8E, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::TESObjectARMO> grimoireConvertInc   (0xD8F, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::TESObjectARMO> grimoirePenetr     (0x9E767, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::BGSKeyword> lessCurseExplDamage   (0xADBD9, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::BGSExplosion> curseExpl (0x995EC, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::EffectSetting> criticalArtEff   (0xDBA, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::SpellItem>     criticalCurseArt (0xDBD, "Requiem for a Dream - ArcaneCurse.esp");
+    static GamePtr<RE::BGSArtObject> curseArto (0x4BE34);
+
     
     static RE::SpellItem* oil_diseaseOnHit;
     static RE::SpellItem* oil_igniteOnHit1;
@@ -171,10 +192,12 @@ namespace gameplay
     void handle_bossAppearance (RE::Actor* boss);
     void bossFightHandle (int fight, uint16_t &counter);
 
+    void handle_mechanist (RE::Actor *pl, RE::MagicItem* deployScroll = nullptr);
+    bool handle_cast_mechanist (RE::Actor *pl, RE::MagicItem* mitem);
+
     static RE::SpellItem *olveCast, *olvePreShield, *sephCast, *harkonCast; 
     static RE::Actor *currBoss;
     static int olveState;
-
 };
 
 
@@ -184,6 +207,11 @@ namespace qst     // newstart quests
 
     static GamePtr<RE::BGSPerk> cult_namira_2   (0x2F1B4C, "ChihSkillTree.esp");
     static GamePtr<RE::TESGlobal> altarsTouched (0xC7BF0F, "devFixes.esp");
+
+    static GamePtr<RE::TESObjectARMO> ringOfBeast   (0xE7FD, "Dawnguard.esm");
+    static GamePtr<RE::TESObjectARMO> ringOfErudite (0xE7FE, "Dawnguard.esm");
+    static GamePtr<RE::TESObjectARMO> amuletOfGarg  (0xF4D5, "Dawnguard.esm");
+    static GamePtr<RE::TESObjectARMO> amuletOfBats  (0x68AE, "Dawnguard.esm");
 
     static RE::TESQuest* startVamp;
     static RE::TESQuest* startCult;

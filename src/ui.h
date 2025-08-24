@@ -1,6 +1,6 @@
 #pragma once
 
-
+#pragma warning (disable : 4100)  // unused parameters
 
 //-------------------------------------------------------  The Widget  -------------------------------------
 class RfadWidget : public RE::IMenu
@@ -55,7 +55,9 @@ struct UISettings
     double st_pos_y {660.};
     double mp_pos_x {110.};
     double mp_pos_y {630.};
+	double attributes_visible{1.};
 
+    double ac_visible{1.};
     double ac_pos_x {45.};      // arcane curse
     double ac_pos_y {600.};
     double ac_scale {100.};

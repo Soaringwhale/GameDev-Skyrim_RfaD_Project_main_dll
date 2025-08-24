@@ -74,9 +74,9 @@ class ItemCardFixer
         }
     };
 
-    static void applyDescription (RE::GFxValue a_itemCard)       // a_itemCard это карточка предмета на которое мы условно навелись
+    static void applyDescription (RE::GFxValue a_itemCard, RE::IMenu* a_menu)       // a_itemCard это карточка предмета на которое мы условно навелись
     {
-        //SKSE::log::info("called applyDescription() from fixer.h");
+        // SKSE::log::info("called applyDescription() from fixer.h");
         // 
         // ниже проверки, смотрим различные поля из ui карточек (GetMember)
 
@@ -90,9 +90,10 @@ class ItemCardFixer
         }
 
         RE::GFxValue a_description;
-        a_itemInfo.GetMember(descriptionVar, &a_description);    // проверка что в iteminfo есть member нового описания (почти всегда выход будет здесь, кроме предметов с файла)
+        a_itemInfo.GetMember(descriptionVar, &a_description);     // проверка что в iteminfo есть member нового описания (почти всегда выход будет здесь, кроме предметов с файла)
         if (!a_description.IsString()) {
             //logger::debug("No description present, returning");
+            //const RE::GFxValue buttonVisible {false};
             return;
         }
 

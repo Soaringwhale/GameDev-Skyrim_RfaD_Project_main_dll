@@ -8,6 +8,7 @@ using InputEvents = RE::InputEvent*;
 
 namespace my         
 {                
+
     static RE::TESDataHandler* handler;
 
     static const char* magick_esp = "Requiem for a Dream - Magick.esp";
@@ -21,11 +22,22 @@ namespace my
 
     // static GamePtr<RE::TESActorBase> LydiaBase (0xA2C8E);    // TEST FOR RP , DELETE LATER !!!
 
+    static GamePtr<RE::BGSKeyword> deployScroll (0xE14014, "RfaD SSE - Awaken.esp");
+
+    static GamePtr<RE::BGSKeyword> bestChecked (0xDE1565, "RfaD SSE - Awaken.esp");
+
     static GamePtr<RE::BGSKeyword> no_dispel (0xC287DC, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSKeyword> physDamageEffect (0xD2AEC3, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::SpellItem> meditationSpell (0xD25DB2, "RfaD SSE - Awaken.esp"); 
-    static GamePtr<RE::SpellItem> meditationFFself (0xD58858, "RfaD SSE - Awaken.esp");
 
+    static GamePtr<RE::SpellItem> meditationSit (0xD58858, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> meditationStandUp (0xDE6675, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> meditationBuffs (0xD25DB2, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::SpellItem> meditationCalmBuffs (0xDF0899, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::EffectSetting> meditationSitting  (0xD58857, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::EffectSetting> meditationStanding (0xDE6677, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSPerk> meditationCalmPerk (0xDF089C, "RfaD SSE - Awaken.esp");
+
+    static GamePtr<RE::SpellItem> pussyMode (0xE04CE1, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> deleteSavesEnabled (0x97C5DD, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> logEnabled (0x874CA5, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> logEnabler (0x874CA4, "RfaD SSE - Awaken.esp");
@@ -43,8 +55,10 @@ namespace my
     static GamePtr<RE::SpellItem> kd_on_self (0x758CD9, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> quen_onHitSoundVisual (0x75DDFE, "RfaD SSE - Awaken.esp");
 
+
     static GamePtr<RE::BGSKeyword> playersAutomaton (0xD1196C, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSKeyword> canBeGivenToMech (0xD1196D, "RfaD SSE - Awaken.esp");
+	static GamePtr<RE::BGSKeyword> gunfireWeapon (0xE6F340, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> showMechStatus (0xD16A7F,"RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESObjectMISC> autoRepairKit (0x17FD11, "RFAD_IW_Mechanist.esp");
     static GamePtr<RE::SpellItem>  autoHealFromKit  (0x18F03F, "RFAD_IW_Mechanist.esp");
@@ -109,7 +123,6 @@ namespace my
     static GamePtr<RE::TESGlobal> snowElf_wears_EnchWeap(0xC2E0F0, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> nb_1_atkChoice(0xCDF64F, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> nb_magicBlade(0xDF100A, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::TESGlobal> atronachAbsorbChanceGlob(0x87A67A, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::TESGlobal> bossFightID(0x1C7FFB, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> redguardFF (0x284194, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::SpellItem> argonianFF (0x3A04AC, "RfaD SSE - Awaken.esp");
@@ -142,8 +155,7 @@ namespace my
     static GamePtr<RE::EffectSetting> bindsInfo_eff(0xE5143A, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EnchantmentItem> snowElfEnch(0x7FBAE8, "RfaD SSE - Awaken.esp");
 
-    static GamePtr<RE::BGSKeyword> actorBoss(0x1C7FF6, "RfaD SSE - Awaken.esp");
-    static GamePtr<RE::BGSKeyword> dodgeEffectKW(0x7B4A92, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> dodgeEffectKW (0x7B4A92, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSKeyword> arrowReflectKW(0xECADB8, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSKeyword> bindKeyKw(0xE2DCC6, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::EffectSetting> manaShield_2(0x535A3E, "RfaD SSE - Awaken.esp");
@@ -242,11 +254,16 @@ namespace my
 
     static GamePtr<RE::BGSPerk> heavy_1_perk2 (0x9A8D38, "devFixes.esp");
 
-    static GamePtr<RE::BGSKeyword> DLC1VampireDrainEffect   (0xD840, "Dawnguard.esm");
-    static GamePtr<RE::BGSKeyword> Mirel_RBB_KW_AbsorbSpell (0x2029B9, "Requiem - Breaking Bad.esp");
-
     static GamePtr<RE::TESGlobal>  sameMutagensGlob (0xC1949E, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSKeyword> mutagen_kw (0x81D, "Alchemy.esp");
+
+	//keywords for absorb
+    static GamePtr<RE::BGSKeyword> PoisonSpell (0xAD3904, "Requiem.esp");
+    static GamePtr<RE::BGSKeyword> SelfTargetedShout (0xAD393A, "Requiem.esp");
+    static GamePtr<RE::BGSKeyword> DLC1VampireDrainEffect   (0xD840, "Dawnguard.esm");
+    static GamePtr<RE::BGSKeyword> Mirel_RBB_KW_AbsorbSpell (0x2029B9, "Requiem - Breaking Bad.esp");
+    static GamePtr<RE::BGSKeyword> atrAbsorbable (0xE2D567, "RfaD SSE - Awaken.esp");
+    static GamePtr<RE::BGSKeyword> no_absorb (0xE2D568, "RfaD SSE - Awaken.esp");
 
     //static GamePtr<RE::SpellItem> rbb_univ_spell (0x2FAD46, "Requiem - Breaking Bad.esp");
 
@@ -259,16 +276,20 @@ namespace my
     static GamePtr<RE::BGSEquipSlot> slotShield    (0x141E8);   // 
     static GamePtr<RE::BGSEquipSlot> slotPotion    (0x35698);   //
 
+    static GamePtr<RE::BGSArtObject> absorbWhirlFX (0xEA518);    //    
     static GamePtr<RE::TESObjectWEAP> vanillaUnarmed (0x1F4);    // 
-    static GamePtr<RE::BGSKeyword> MagicVampireDrain (0x101BDE); //
     static GamePtr<RE::BGSKeyword> actorDwarven(0x1397A);        //
     static GamePtr<RE::BGSKeyword> alch_heal_KW(0x42503);        //
     static GamePtr<RE::BGSKeyword> magicSlow (0xB729E);          //
-    static GamePtr<RE::BGSKeyword> magicShout (0x46B99);     //
-    static GamePtr<RE::BGSKeyword> bound1H (0x510BE);        //
-    static GamePtr<RE::BGSKeyword> bound2H (0x84D1D);        // 
-    static GamePtr<RE::BGSKeyword> boundBow(0x28A42);        //
-    static GamePtr<RE::BGSKeyword> sword_1h(0x1E711);        //
+    static GamePtr<RE::BGSKeyword> magicShout (0x46B99);       //
+    static GamePtr<RE::BGSKeyword> MagicVampireDrain (0x101BDE); //
+    static GamePtr<RE::BGSKeyword> magicDamageFire  (0x1CEAD);  
+    static GamePtr<RE::BGSKeyword> magicDamageFrost (0x1CEAE);  //
+    static GamePtr<RE::BGSKeyword> magicDamageShock (0x1CEAF);  //
+    static GamePtr<RE::BGSKeyword> bound1H (0x510BE);          //
+    static GamePtr<RE::BGSKeyword> bound2H (0x84D1D);          // 
+    static GamePtr<RE::BGSKeyword> boundBow(0x28A42);          //
+    static GamePtr<RE::BGSKeyword> sword_1h(0x1E711);          //
     static GamePtr<RE::BGSKeyword> vendorItemHide (0x914EA);    //
     static GamePtr<RE::BGSKeyword> vendorItemWeapon (0x8F958);  //
     static GamePtr<RE::BGSKeyword> armorShield (0x965B2);       //
@@ -317,6 +338,7 @@ namespace my
     static bool twicedUpdate;
     static bool snowElf_re_chanted;
     static bool meditateState;
+    static uint16_t meditateCalmTimer;
        
     void initGameData();
     void sf_handle_reserved_MP();
@@ -358,6 +380,7 @@ struct mys                        //  variables that can be used in all project 
     static  RE::UI     *ui;
 
     static RE::BGSKeyword     *armorHeavyKw;
+    static RE::BGSKeyword     *actorBoss;
     static RE::EffectSetting *dodge_KD_eff;
     static RE::SpellItem     *dodge_KD_spl;
     static RE::BGSPerk         *dodgePerk;
@@ -376,9 +399,11 @@ float on_physical_hit (RE::Actor* target, RE::HitData hit_data);
 
 void player_anim_handle(RE::BSTEventSink<RE::BSAnimationGraphEvent>*, RE::BSAnimationGraphEvent*, RE::BSTEventSource<RE::BSAnimationGraphEvent>*);
 
-void on_spell_release (RE::ActorMagicCaster* this_, RE::MagicItem* magic_item);
-bool on_check_cast (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dualCast);
-float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect);
+void   on_spell_release (RE::ActorMagicCaster* this_, RE::MagicItem* magic_item);
+bool   on_add_effect  (RE::MagicTarget* mtarget, RE::MagicTarget::AddTargetData &a_data);
+bool   on_check_cast  (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dualCast);
+int8_t on_check_absorb (RE::MagicTarget* mtarget, RE::Actor* caster, RE::MagicItem* mItem, const RE::Effect* effect);
+float  on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect);
 
 bool on_drink_potion(RE::Actor* actor, RE::AlchemyItem* potion, RE::ExtraDataList* extra_data_list);
 
@@ -391,7 +416,9 @@ bool on_meleeWeap_collide (RE::Actor* attacker, RE::Actor* victim);
 void on_projectile_launch (RE::Projectile* projRef, RE::Projectile::LaunchData& ldata);
 
 void on_3d_load (RE::TESObjectREFR *refr);
+void on_actor_spawn_finish (RE::Actor *actor);
 void on_jump (RE::Actor *actor);
+void on_hidden_speed_mult (RE::Actor *actor, float &multRef);
 
 bool on_remove_item_from_actor (RE::Character *actor, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont);
 bool on_remove_item_from_cont  (RE::TESObjectREFR* cont, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont);
@@ -401,7 +428,8 @@ void on_pickup_object (RE::Character *actor, RE::TESObjectREFR* object, std::int
 void on_equip  (RE::Actor* actor, RE::TESBoundObject* object, RE::ObjectEquipParams* params);
 void on_unequip(RE::Actor* actor, RE::TESBoundObject* object, RE::ObjectEquipParams* params);
 
-void on_death (RE::Actor* victim, RE::Actor* killer);
+void on_dying (RE::Actor* victim);
+void on_kill (RE::Actor* victim, RE::Actor* killer);
 void on_activate (RE::TESObjectREFRPtr whoActivated, RE::TESObjectREFRPtr objectActivated);
 void on_location_change (RE::TESObjectREFRPtr refHandle, RE::BGSLocation* oldLoc, RE::BGSLocation* newLoc);    // events
 void on_wait_menu_open();
@@ -415,7 +443,9 @@ void log_pre_load_game (RE::Actor* pl);
 
 void on_valueMod_Effect_Finish(RE::ValueModifierEffect* modEff);
 
-void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item);
+void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item, const RE::GPtr<RE::GFxMovieView> &uiMovie);
+
+void on_ui_descr_button (float a_state);
 
 void on_apply_poison (RE::InventoryEntryData* data, RE::AlchemyItem* poison, int &count);
 
@@ -424,5 +454,5 @@ void handle_numbers_widget ();   // impl in ui.cpp
 
 //bool on_arrow_collide(RE::Projectile* proj, RE::hkpCollidable* coll); 
 
-void on_my_update();
+void on_my_update(RE::Actor *pl);
 //void on_micro_update();

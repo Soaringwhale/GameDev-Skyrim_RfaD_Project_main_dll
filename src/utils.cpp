@@ -1,5 +1,6 @@
 
 #pragma warning (disable : 4189)
+#pragma warning (disable : 4100)  // unused parameters
 
 #include "utils.h"
 #include "REL/Relocation.h"
@@ -71,7 +72,7 @@ auto u_get_second_AV_weight(const RE::ValueModifierEffect& active_effect) -> flo
 
 auto u_actor_has_active_mgef_with_keyword (RE::Actor *actor, const RE::BGSKeyword *keyword) -> bool 
 {
-    LOG ("called u_actor_has_active_mgef_with_keyword()");
+    //LOG ("called u_actor_has_active_mgef_with_keyword()");
     auto active_effects = actor->GetActiveEffectList();      // list
     if (!active_effects) {
         return false;
@@ -198,7 +199,19 @@ RE::MagicItem* u_get_current_casting_spell (RE::Actor* actor, uint32_t mcasterSl
     else return nullptr;
 } 
 
-auto u_is_power_attacking (RE::Actor* actor) -> bool
+bool u_is_bow_drawning (RE::Actor* actor)
+{
+    using S = RE::ATTACK_STATE_ENUM;
+    auto state = actor->GetAttackState();
+    return (state == S::kBowDraw || state == S::kBowDrawn || state == S::kBowAttached);
+}
+
+bool u_is_attacking (RE::Actor* actor)
+{
+    return (actor->GetAttackState() != RE::ATTACK_STATE_ENUM::kNone);
+}
+
+bool u_is_power_attacking (RE::Actor* actor)
 {
     const auto current_process = actor->currentProcess;
     if (!current_process) return false;
@@ -246,6 +259,12 @@ void u_jump (RE::Actor* actor)   // makes an actor jump if he can (check state)
 {
     REL::Relocation<decltype(u_jump)> func(REL::ID(36271));
     func(actor);
+}
+
+void u_set_ghost (RE::Actor *actor, bool set)    // actor avoids all hits, even with precision mod
+{
+    REL::Relocation<decltype(u_set_ghost)> func (REL::ID(36287));
+    func (actor, set);
 }
 
 
@@ -801,15 +820,17 @@ auto u_disable_controls_selective() -> RE::stl::enumeration<RE::UserEvents::USER
     auto wasEnabledControls = controls->enabledControls;  // controls, enabled before this func
     using Con = RE::ControlMap::UEFlag;
     controls->ToggleControls(Con::kFighting, false);
-    controls->ToggleControls(Con::kJumping, false);       // disable some controls
+    controls->ToggleControls(Con::kJumping, false);
     controls->ToggleControls(Con::kMenu, false);
     controls->ToggleControls(Con::kMovement, false);
     controls->ToggleControls(Con::kMainFour, false);
+    controls->ToggleControls(Con::kPOVSwitch, false);   // disable 1/3person switch
+    controls->ToggleControls(Con::kWheelZoom, false);   // disable mouse wheel
+
     return wasEnabledControls;                            // return what was enabled
 
     // RE::ControlMap::GetSingleton()->enabledControls = result_of_this_function;     // restore controls
 }
-
 
 bool u_findClosestReferenceOfTypeInRadius (RE::TES* tes, const RE::TESBoundObject &obj, const RE::NiPoint3 &centerOfSearch, float afRadius, RE::NiPointer<RE::TESObjectREFR> &outRef)
 {
@@ -833,6 +854,14 @@ uint32_t u_get_open_state (RE::TESObjectREFR* refr)     // get door or container
     REL::Relocation<decltype(u_get_open_state)> func (RELOCATION_ID(14180, 14288).address());    // в момент активации закрытой двери будет 1, в момент активации открытой 3
     return func (refr);
 }
+
+void u_set_open_state (RE::TESObjectREFR* refr, bool a_open, bool a_snap)   // 
+{
+    if (!refr) return;
+    REL::Relocation<decltype(u_set_open_state)> func (RELOCATION_ID(14179, 14287).address());
+    func (refr, a_open, a_snap);
+}
+
 
 bool u_is_food (RE::TESBoundObject* obj)     //
 {
@@ -884,6 +913,62 @@ float u_get_distance (RE::TESObjectREFR* a, RE::TESObjectREFR* b)
     return a->GetPosition().GetDistance(b->GetPosition());  // also there is  .GetSquaredDistance()
 }
 
+namespace u_Collision   // ------ разные мувы с коллизией -------------
+{
+    void set_collision_layer (RE::Actor* actor, RE::COL_LAYER layer)   // сетает принятый RE::COL_LAYER в соответствующие этому енаму биты (выставит текущий COL_LAYER)
+    {
+        if (auto control = actor->GetCharController()) {
+            if (auto body = const_cast<RE::hkpRigidBody*>(control->GetBodyImpl())) {
+                if (auto& colFilterInfo = body->collidable.broadPhaseHandle.collisionFilterInfo) {
+                    colFilterInfo &= ~0x7F;  // clear coll flags (очищаем 7 младших бит 1000 0000), вероятно в colFilterInfo младщие 7 бит это enum RE::COL_LAYER
+                    colFilterInfo |= static_cast<uint32_t>(layer);    // в этот enum сетаем принятый layer (просетает в виде маски)
+                }
+            }
+        }
+    }
+    void remove_collision (RE::Actor* actor) 
+	{ 
+        if (auto control = actor->GetCharController()) {    // CharacterController отвечает за физику
+            if (auto body = const_cast<RE::hkpRigidBody*>(control->GetBodyImpl())) {
+                if (auto& colFilterInfo = body->collidable.broadPhaseHandle.collisionFilterInfo) {
+                    colFilterInfo &= ~0x7F;  // clear coll flags (очищаем 7 младших бит 1000 0000), вероятно в colFilterInfo младщие 7 бит это enum RE::COL_LAYER
+                    colFilterInfo |= static_cast<uint32_t>(RE::COL_LAYER::kNonCollidable);   // в этот enum сетаем layer RE::COL_LAYER::kNonCollidable = 15 (просетает в виде маски)
+                    // colFilterInfo |= COLLISION_FLAG;   // сетаем Flag::kNoCollision aka 1 << 14  (не обязательно, но можно делать, и вероятно этого будет достаточно вместо строки выше)
+                    
+                }
+            }
+        }
+	}
+	void return_collision (RE::Actor* actor)   // вернуть коллизию, если отключили через RE::COL_LAYER
+	{ 
+		set_collision_layer (actor, RE::COL_LAYER::kCharController); 
+	}
+};
+
+char* u_get_extra_editorID (RE::ExtraDataList* lists)
+{ 
+    REL::Relocation<decltype(u_get_extra_editorID)> func (REL::ID(15746));
+    return func (lists);
+}
+
+void u_set_extra_editorID (RE::ExtraDataList* lists, const char* edid)
+{
+    REL::Relocation<decltype(u_set_extra_editorID)> func (REL::ID(11845));
+    func (lists, edid);
+}
+
+RE::ExtraTextDisplayData* u_get_extra_textDisplayData (RE::ExtraDataList* exlist)   // содержит например exdata->displayName
+{
+    REL::Relocation<decltype(u_get_extra_textDisplayData)> func (REL::ID(11508));
+    return func (exlist);
+}
+
+void u_set_extra_item_name (void* menu, RE::InventoryEntryData* item, RE::ExtraDataList* extralist, const char* name)
+{
+    REL::Relocation<decltype (u_set_extra_item_name)> func (REL::ID(50530));   // set extra name, for example for weap
+    func (nullptr, item, nullptr, name);
+    // call like  u_set_extra_item_name (nullptr, entryData, nullptr, "testName");
+}
 
 void craftingMenusTest()       //  later learn how to deal with craft menus
 {
@@ -902,6 +987,28 @@ void craftingMenusTest()       //  later learn how to deal with craft menus
     }
 }
 
+void u_toggle_vanilla_attribute_bars (bool a_bEnable)
+{
+    auto hud = RE::UI::GetSingleton()->GetMenu(RE::HUDMenu::MENU_NAME);
+    if (hud) {
+        auto& uiMovie = hud->uiMovie;
+        if (uiMovie) {
+            RE::GFxValue bEnable;
+            bEnable.SetBoolean(a_bEnable);
+            /*uiMovie->SetVariable("HUDMovieBaseInstance.Health._visible", bEnable);
+               uiMovie->SetVariable("HUDMovieBaseInstance.Magica._visible", bEnable);
+               uiMovie->SetVariable("HUDMovieBaseInstance.Stamina._visible", bEnable);*/
+            uiMovie->SetVariable("HUDMovieBaseInstance.Health.HealthMeter_mc._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Health.HealthPenaltyMeter_mc._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Magica.MagickaMeter_mc._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Magica.MagickaFlashInstance._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Magica.MagickaPenaltyMeter_mc._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Stamina.StaminaMeter_mc._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Stamina.StaminaFlashInstance._visible", bEnable);
+            uiMovie->SetVariable("HUDMovieBaseInstance.Stamina.StaminaPenaltyMeter_mc._visible", bEnable);
+        }
+    }
+}
 
  void u_log_actor_perk_entries (RE::Actor* actor, RE::BGSPerkEntry::EntryPoint theEntry, std::string entryNameForLog)
  {
@@ -915,7 +1022,7 @@ void craftingMenusTest()       //  later learn how to deal with craft menus
          if (!perk) continue;
          for (auto &entry : perk->perkEntries) 
          {        
-            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;                                        //   тут отсеиваем архетипы  ability и quest
+            if (entry->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) continue;  // отсеиваем архетипы  ability и quest
             
             // тут приводим ентри общего архетипа BGSPerkEntry к типу конкретно BGSEntryPointPerkEntry (не ability и quest)
             RE::BGSEntryPointPerkEntry *entry_point = skyrim_cast<RE::BGSEntryPointPerkEntry*>(entry);    

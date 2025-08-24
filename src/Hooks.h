@@ -10,7 +10,6 @@
     #define RELOCATION_OFFSET(SE, AE) (SE)
 #endif
 
-
 namespace hooks
 {
     //------ hooks --------
@@ -32,7 +31,7 @@ namespace hooks
 
             if (upd_timer <= 0.f) {
                 upd_timer = 2.0f;  // every 2 sec
-                on_my_update();
+                on_my_update(player_);
             }
             return old_func(player_, delta);
         }
@@ -58,24 +57,30 @@ namespace hooks
 
     class HiddenSpeedMult_updater_Hook  // returns actor hidden speed mult, default 1.0
     {
-    public:
-        static void install_hook() {
-            old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37013).address() + 0x1A,    new_func);
-        }
-    private:
-        static float new_func(RE::Actor* a_actor)
+      public:
+        static void install_hook() {old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37013).address() + 0x1A, new_func);}
+      private:
+        static float new_func(RE::Actor* actor)
         {
-            float hiddenMult = old_func(a_actor);  // default func is called
-            if (a_actor->IsPlayerRef() && mys::dodge_timer > 0) {
-                mys::dodge_timer -= mys::time_delta;
-                hiddenMult += 2.2f;
-            }
+            float hiddenMult = old_func(actor);       // default func is called
+            on_hidden_speed_mult (actor, hiddenMult);
             return hiddenMult - mys::ms_compensator;
         }
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
-    // НАДО ХУКНУТЬ CALC_ATTACK_STAMINA_DRAIN , но не function call хуками т.к. их там 4 штуки (4 места вызова), а function start хуком из 8 ролика. Сделать траты стамины через это.
+    class OnMovementDelta_Hook    // мб расстояние движения за 1 кадр. потестить. Если ничего не возвращать персонаж не будет двигаться.
+    {
+      public:
+        static void install_hook() {old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36359).address() + 0xF0, new_func);}
+      private:
+        static void new_func (RE::Actor* actor, float delta)
+        {
+            // return;  // disable movement
+            return old_func(actor, delta);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
 
     // ---------------------------------------  AI HOOKS -----------------------------------------------
 
@@ -110,15 +115,13 @@ namespace hooks
     class OnRefrInitHavok_Hook  // virt. InitHavok() / not used
     {
     public:
-        static void install_hook()
-        {
+        static void install_hook() {
             old_func = REL::Relocation<uintptr_t>(RE::VTABLE_TESObjectREFR[0]).write_vfunc(0x66, new_func);
         }
     private:
         static void new_func(RE::TESObjectREFR* this_)
         {
-            if (this_->GetBaseObject())
-            {
+            if (this_->GetBaseObject()){
                 if (this_->GetBaseObject()->GetFormType() == RE::FormType::Misc) {
                     this_->DetachHavok(this_->GetCurrent3D());  // disable havok and activation (object will become full static)
                     return;  // don't init havok
@@ -129,11 +132,10 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
     
-    class OnLoad3D_Hook  // virt. Load3D()
+    class OnLoad3D_Hook  // virt. Load3D()    // early spawn  // not fully loaded yet
     {
       public:
-        static void install_hook()
-        {
+        static void install_hook() {
             old_func_ref = REL::Relocation<uintptr_t>(RE::VTABLE_TESObjectREFR[0]).write_vfunc(0x6A, new_func_ref);  // objects
             old_func_npc = REL::Relocation<uintptr_t>(RE::VTABLE_Character[0]).write_vfunc(0x6A, new_func_npc);      // actors
         }
@@ -154,6 +156,19 @@ namespace hooks
         }
         static inline REL::Relocation<decltype(new_func_ref)> old_func_ref;
         static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
+    };
+
+    class OnActorSpawnFinish_Hook  // Actor::ShouldBeRagdolled() from Actor::InitHavokHelper()  // at the end of appearance
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36192).address() + 0x5de, new_func); }
+      private:
+        static bool new_func (RE::Actor* actor)  // actor already has HighProcess, 3D, CharController(havok), MovementController
+        {
+            if (actor) on_actor_spawn_finish (actor);
+            return old_func(actor);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
     class OnRemoveItem_Hook  // virt. RemoveItem()  ЭТО ПРИМЕР ИЗ КАТЕГОРИИ "ВОЗВРАЩЕНИЕ СЛОЖНЫХ СТРУКТУР ПО ЗНАЧЕНИЮ" (имеет недефолтный конструктор/деструктор либо ее размер не степерь 2)
@@ -232,7 +247,7 @@ namespace hooks
         static void new_func_pc(RE::PlayerCharacter* this_, RE::TESObjectREFR* obj, std::int32_t count, bool arg3 = false, bool playSound = true)
         {
             on_pickup_object(this_, obj, count, arg3, playSound);
-            old_func_pc(this_, obj, count, arg3, playSound);
+            old_func_pc(this_, obj, count, arg3, playSound);        // count = 0 to disable pickUp
         }
         static void new_func_npc(RE::Character* this_, RE::TESObjectREFR* obj, std::int32_t count, bool arg3 = false, bool playSound = true)
         {
@@ -243,15 +258,14 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
     };
 
-    class OnEquip_Hook
+    class OnEquip_Hook    // ActorEquipManager::Equip()
     {
       public:
         static void install_hook()    {
             old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37938).address() + RELOCATION_OFFSET(0xE5, 0x170), new_func);
         }
       private:
-        static void new_func(RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object,
-            RE::ObjectEquipParams* params)
+        static void new_func(RE::ActorEquipManager* equip_manager, RE::Actor* actor, RE::TESBoundObject* bound_object, RE::ObjectEquipParams* params)
         {
             on_equip(actor, bound_object, params);
             return old_func(equip_manager, actor, bound_object, params);
@@ -274,7 +288,7 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
-    class OnDispel_Hook
+    class OnDispel_Hook  // dispel effect
     {
       public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33777).address() + 0x32, new_func); }
@@ -322,6 +336,177 @@ namespace hooks
         }
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
+  
+    class OnDamageFromWater_Hook  //  sinking w/o oxygen and dangerous water  // every frame // Actor::DoDamage()  from  Actor::Update()
+    {
+      public:
+        static void install_hook() { 
+            old_func_drown  = SKSE::GetTrampoline().write_call<5>(REL::ID(36357).address() + 0x8a3, new_func_drown);
+            old_func_danger = SKSE::GetTrampoline().write_call<5>(REL::ID(36357).address() + 0xfb4, new_func_danger); 
+        }
+      private:
+        static bool new_func_drown (RE::Actor* actor, float damage, RE::Actor* attacker, bool a4) // only player can drown
+        {
+            return old_func_drown (actor, damage, attacker, a4);
+        }
+        static bool new_func_danger (RE::Actor* actor, float damage, RE::Actor* attacker, bool a4)  // dangerous water affects any npc
+        {
+            return old_func_danger (actor, damage, attacker, a4);
+        }
+        static inline REL::Relocation<decltype(new_func_drown)> old_func_drown;
+        static inline REL::Relocation<decltype(new_func_danger)> old_func_danger;
+    };
+
+    class OnTrapDamage_Hook  // all physical traps including spike-elevator platform, don't handle mgeffect dmg like poison spike
+    {
+      public:
+        static void install_hook() { 
+            old_func1  = SKSE::GetTrampoline().write_call<5>(REL::ID(36508).address() + 0x1ae, new_func1);
+            old_func2 = SKSE::GetTrampoline().write_call<5>(REL::ID(36509).address() + 0x43, new_func2); 
+        }
+      private:
+        static bool new_func1 (RE::Actor* actor, float damage, RE::Actor* attacker, bool a4) // Actor::DoDamage() from Actor::DoTrap2()
+        {
+            //return false; // disable dmg
+            return old_func1 (actor, damage, attacker, a4);
+        }
+        static void new_func2 (RE::Actor* actor, RE::HitData &hitData)  // Actor::DoHitMe() from Actor::DoTrap1()
+        {
+            //return; // disable dmg
+            return old_func2 (actor, hitData);
+        }
+        static inline REL::Relocation<decltype(new_func1)> old_func1;
+        static inline REL::Relocation<decltype(new_func2)> old_func2;
+    };
+
+    class OnCalcFallDamage_Hook  //  from height and ragdoll (after land surfing)
+    {
+      public:
+        static void install_hook() { 
+            old_func_height  = SKSE::GetTrampoline().write_call<5>(REL::ID(36973).address() + 0xae, new_func_height); 
+            old_func_ragdoll = SKSE::GetTrampoline().write_call<5>(REL::ID(36346).address() + 0x35, new_func_ragdoll);
+        }
+      private:
+        static float new_func_height(RE::Actor* actor, float height, float a3)
+        {
+            // сделать тут эпик приземление в тяже если пролетел больше 1-2м
+            //return 0;   // disable dmg
+            return old_func_height (actor, height, a3);   // default
+        }
+		static float new_func_ragdoll(RE::Actor* actor, float height, float a3)
+        {
+            return 0;  // ragdoll dmg disabled
+            // return old_func_ragdoll (actor, height, a3);   // default
+        }
+        static inline REL::Relocation<decltype(new_func_height)> old_func_height;
+        static inline REL::Relocation<decltype(new_func_ragdoll)> old_func_ragdoll;
+    };
+
+    class OnOpenConsole_Hook  
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(51395).address() + 0x13, new_func); }
+      private:
+        static void new_func () // Console::ToggleOpenConsole_14085AA30()
+        {
+            //return;          // disable open console 
+            old_func();    // default open console
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+	 
+    class OnConsoleInputHook    // Script::CompileAndRun_1402E75F0
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(52065).address() + 0xE2, new_func);}
+      private:
+        static void new_func (RE::Script* a_script, RE::ScriptCompiler* a_compiler, RE::COMPILER_NAME a_name, RE::TESObjectREFR* a_targetRef) 
+        {   //                                                                      kSystemWindowCompiler = 1
+            std::string enteredCommand = a_script->GetCommand();
+            old_func (a_script, a_compiler, a_name, a_targetRef);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
+    class OnConsoleKill_Hook  // Actor::Kill_1405D4700 from kill / killall commands
+    {
+      public:
+        static void install_hook() { 
+            old_func1 = SKSE::GetTrampoline().write_call<5>(REL::ID(21553).address() + 0xf0, new_func1); 
+            old_func2 = SKSE::GetTrampoline().write_call<5>(REL::ID(21554).address() + 0xa7, new_func2);
+        }
+      private:
+        static void new_func1 (RE::Actor *victim, RE::Actor *killer, float a3, bool a4, bool a5)
+        {
+            if (victim && victim->HasKeyword(mys::actorBoss)) {
+                old_func1 (mys::player, killer, a3, a4, a5);  // kill command -> punish
+                RE::ConsoleLog::GetSingleton()->Print("Магия консоли была сильна, но босс оказался сильнее..");
+            }
+            else old_func1 (victim, killer, a3, a4, a5);
+        }
+		static void new_func2 (RE::Actor *victim, RE::Actor *killer, float a3, bool a4, bool a5)
+        {
+            if (victim && victim->HasKeyword(mys::actorBoss)) {
+                old_func2(mys::player, killer, a3, a4, a5);  // killall command -> punish
+                RE::ConsoleLog::GetSingleton()->Print("Магия консоли была сильна, но босс оказался сильнее..");
+            }
+            else old_func2 (victim, killer, a3, a4, a5);
+        }
+        static inline REL::Relocation<decltype(new_func1)> old_func1;
+        static inline REL::Relocation<decltype(new_func2)> old_func2;
+    };
+
+    class OnQuickSaveLoadProcessButton_Hook
+    {
+      public:
+        static void install_hook() {old_func = REL::Relocation<uintptr_t>(RE::VTABLE_QuickSaveLoadHandler[0]).write_vfunc(0x5, new_func);}
+      private:
+        static void new_func(void* this_, void* a2)
+        {
+            return;  // disable quick save/load button processing
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
+    class OnCalcAttackStamina_Hook  // power attack, power bash etc.
+    {
+      public:
+        static void install_hook() { 
+            old_func1 = SKSE::GetTrampoline().write_call<5>(REL::ID(28629).address() + 0x1561, new_func1); 
+            old_func2 = SKSE::GetTrampoline().write_call<5>(REL::ID(37650).address() + 0x16e,  new_func2);
+            old_func3 = SKSE::GetTrampoline().write_call<5>(REL::ID(38047).address() + 0xbb,   new_func3);
+            old_func4 = SKSE::GetTrampoline().write_call<5>(REL::ID(48139).address() + 0x29b,  new_func4);
+        }
+      private:
+        static float new_func1 (RE::ActorValueOwner *avOwner, RE::BGSAttackData *atkData)  {
+            return old_func1 (avOwner, atkData);
+        }
+        static float new_func2 (RE::ActorValueOwner *avOwner, RE::BGSAttackData *atkData)  {;
+            return old_func2 (avOwner, atkData);
+        }
+        static float new_func3 (RE::ActorValueOwner *avOwner, RE::BGSAttackData *atkData)  {
+            return old_func3 (avOwner, atkData);
+        }
+        static float new_func4 (RE::ActorValueOwner *avOwner, RE::BGSAttackData *atkData)  {
+            return old_func4 (avOwner, atkData);
+        }
+        static inline REL::Relocation<decltype(new_func1)> old_func1;
+        static inline REL::Relocation<decltype(new_func2)> old_func2;
+        static inline REL::Relocation<decltype(new_func3)> old_func3;
+        static inline REL::Relocation<decltype(new_func4)> old_func4;
+    };
+
+    class OnCalcSprintStamina_Hook  // sprint st drain per frame 
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36994).address() + 0xc9, new_func); }
+      private:
+        static float new_func (float currStamina, float a_delta)
+        {
+            return old_func(currStamina, a_delta);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
 
     class OnPhysicalHit_Hook  // works just before hit, can't decline hit event itself
     {
@@ -336,8 +521,8 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
-    class On_MeleeWeapCollide_Hook  //  melee weapon collides target, works before hit process, can decline hit event
-    {
+    class OnMeleeWeapCollide_Hook  //  melee weapon collides target.  Actor::CombatHit_140628C20  from  Actor::DoMeleeAttack_140627930   // has target
+    {                    
       public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(37650).address() + 0x38B, new_func); }
       private:
@@ -353,6 +538,32 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
+    class OnDoMeleeAttack_Hook   // Actor::DoMeleeAttack_140627930 from HitFrameHandler::Handle()    // before all, has no target yet
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(41747).address() + 0x3a, new_func); }
+
+      private:
+        static void new_func(RE::Actor* actor, bool mbLeftHand, bool a3)  // Actor::DoMeleeAttack_140627930
+        {
+            SKSE::log::info("called OnDoMeleeAttack");
+            //old_func(actor, mbLeftHand, a3);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
+    class OnSetLifeState_Hook  // kBleedout, kEssentialDown, kDying, kDead, kDontMove etc.
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36872).address() + 0x6c4, new_func); } 
+      private:
+        static void new_func (RE::Actor* actor, RE::ACTOR_LIFE_STATE state)  // SetLifeState from KillImpl (sets essentialDown there)
+        {
+            //if (actor->HasKeyword(ourPlayersNpcKeyword)) actor->StopCombat();  // end combat + not fall
+            //else old_func (actor, state);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
 
     class OnSpellRelease_Hook   //  virt. ActorMagicCaster::SpellCast()    //  works on spell release
     {
@@ -385,63 +596,115 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
+    class OnCheckAbsorb_Hook   //  virt.
+    {
+      public:
+        static void install_hook()    {
+            old_func_npc = REL::Relocation<uintptr_t>(RE::VTABLE_Character[4]).write_vfunc(0x0B, new_func_npc);
+            old_func_pc  = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[4]).write_vfunc(0x0B, new_func_pc);
+        }
+      private:
+        static bool new_func_npc (RE::MagicTarget* mtarget, RE::Actor* caster, RE::MagicItem* mItem, const RE::Effect* effect)
+        {
+            int8_t retcode = on_check_absorb (mtarget, caster, mItem, effect);
+            if      (retcode == 1) return true;    // force true but w/o default processings (mana, fx) (won't absorb ignore-absorb spells anyway)
+            else if (retcode == 0) return false;   // don't process absorb
+            else return old_func_npc(mtarget, caster, mItem, effect); // == -1   // default process absorb 
+        }
+        static bool new_func_pc (RE::MagicTarget* mtarget, RE::Actor* caster, RE::MagicItem* mItem, const RE::Effect* effect)
+        {
+            int8_t retcode = on_check_absorb (mtarget, caster, mItem, effect);
+            if      (retcode == 1) return true;    // 
+            else if (retcode == 0) return false;   // 
+            else return old_func_pc (mtarget, caster, mItem, effect); // == -1
+        }
+        static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
+        static inline REL::Relocation<decltype(new_func_pc)>  old_func_pc;
+    };
+
+    class OnAddMagicTargetHook   //  virt. MagicTarget::AddTarget()  - works before add effect, before absorb check, before adjustActiveEffect, processes inactive effects
+    {
+      public:
+        static void install_hook()    {
+            old_func_npc = REL::Relocation<uintptr_t>(RE::VTABLE_Character[4]).write_vfunc(0x1, new_func_npc);
+            old_func_pc  = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[4]).write_vfunc(0x1, new_func_pc);
+        }
+      private:
+        static bool new_func_npc (RE::MagicTarget* mtarget, RE::MagicTarget::AddTargetData &a_targetData)
+        {
+            if (on_add_effect (mtarget, a_targetData)) return old_func_npc(mtarget, a_targetData);  // default spell apply
+            else return false;   // decline
+        }
+        static bool new_func_pc (RE::MagicTarget* mtarget, RE::MagicTarget::AddTargetData &a_targetData)
+        {
+            if (on_add_effect (mtarget, a_targetData)) return old_func_pc (mtarget, a_targetData);
+            else return false;   // 
+        }
+        static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
+        static inline REL::Relocation<decltype(new_func_pc)>  old_func_pc;
+
+    };
+
+    class OnAdjustActiveEffect_Hook  //   ActiveEffect::Adjust()  from  MagicTarget::CheckAddEffect()
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33763).address() + 0x4A3, new_func); }
+      private:
+        static void new_func(RE::ActiveEffect* eff, float power, bool unk)
+        {
+            on_adjust_active_effect(eff, power, unk);
+            old_func(eff, power, unk);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
     class OnApplyResist_Hook  //  срабатывает при порезке об резисты, возвращает мульт остатка урона, например 0.3 (если резист был 70%)
     {
-    public:
+      public:
         static void install_hook()    {
             REL::Relocation<uintptr_t> for_npc_hook{ RELOCATION_ID(261401, 0) };
             REL::Relocation<uintptr_t> for_pc_hook{ RELOCATION_ID(261920, 0) };
             old_func_npc = for_npc_hook.write_vfunc(0x0A, new_func_npc);
             old_func_pc = for_pc_hook.write_vfunc(0x0A, new_func_pc);
         }
-    private:
+      private:
         static float new_func_pc (RE::MagicTarget* this_, RE::MagicItem* magic_item, RE::Effect* effect, RE::TESBoundObject* bound_object)
         {
-            if (!this_ || !magic_item || !effect) {
-                return old_func_pc(this_, magic_item, effect, bound_object);
-            } else {
-                return on_resist_apply (this_, magic_item, effect);
-            }
+            if (!this_ || !magic_item || !effect) return old_func_pc (this_, magic_item, effect, bound_object);
+            else return on_resist_apply (this_, magic_item, effect);
         }
-        static float new_func_npc(RE::MagicTarget* this_, RE::MagicItem* magic_item, RE::Effect* effect, RE::TESBoundObject* bound_object)
+        static float new_func_npc (RE::MagicTarget* this_, RE::MagicItem* magic_item, RE::Effect* effect, RE::TESBoundObject* bound_object)
         {
-            if (!this_ || !magic_item || !effect) {
-                return old_func_npc(this_, magic_item, effect, bound_object);
-            } else {
-                return on_resist_apply (this_, magic_item, effect);
-            }
+            if (!this_ || !magic_item || !effect) return old_func_npc (this_, magic_item, effect, bound_object);
+			else return on_resist_apply (this_, magic_item, effect);
         }
         static inline REL::Relocation<decltype(new_func_pc)> old_func_pc;
         static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
     };
 
-    class OnPlayerDrinkPotion_Hook  // before drinking, сan decline potion. Doesn't check poisons
+    class OnPlayerDrinkPotion_Hook  // before drinking. Doesn't check poison
     {
-    public:
-        static void install_hook()
-        {
-            REL::Relocation<uintptr_t> hook{ RELOCATION_ID(261916, 0) };
-            old_func = hook.write_vfunc(0x10F, new_func);
+      public:
+        static void install_hook() {
+            old_func = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[0]).write_vfunc(0x10F, new_func);
         }
-    private:
+      private:
         static bool new_func(RE::Actor* this_, RE::AlchemyItem* potion, RE::ExtraDataList* extra_data_list)
         {
-            if (!this_ || !potion) {
-                return old_func(this_, potion, extra_data_list);
-            }
-            if (!on_drink_potion(this_, potion, extra_data_list))
-                return true;                                  // predict from applying
-            return old_func(this_, potion, extra_data_list);  // simple applying
+            if (this_ && potion) {
+                if (!on_drink_potion(this_, potion, extra_data_list))
+                    return true;   // cancel applying potion
+            }                              
+            return old_func(this_, potion, extra_data_list);
         }
-
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
     class OnApplyPoison_Hook  // apply poison to weapon
     {
-    public:
+      public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(39407).address() + 0x106, new_func); }
-    private:
+      private:
         static void new_func(RE::InventoryEntryData* data, RE::AlchemyItem* poison, int count)
         {
             if (data && poison && count > 0) {
@@ -453,38 +716,6 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
-    class OnAdjustActiveEffect_Hook  //    before adjust
-    {
-    public:
-        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33763).address() + 0x4A3, new_func); }
-    private:
-        static void new_func(RE::ActiveEffect* this_, float power, bool unk)
-        {
-            on_adjust_active_effect(this_, power, unk);
-            old_func(this_, power, unk);
-        }
-        static bool new_hooks_installed;
-        static inline REL::Relocation<decltype(new_func)> old_func;
-    };
-
-    class OnEffectFinish_Hook  // хуки для каждого архетипа эффекта по отдельности. Пока используется ValueModifier через соответствующий класс.
-    {
-    public:
-        static void install_hook()
-        {
-            REL::Relocation<std::uintptr_t> hook{ RE::ValueModifierEffect::VTABLE[0] };
-            old_func = hook.write_vfunc(0x15, new_func_4_valueMod);  //   хук OnEffectFinish для ValueModifier эффектов
-        }
-
-    private:
-        static void new_func_4_valueMod(RE::ValueModifierEffect* this_)  // works for modav and mod peak av
-        {
-            if (this_)
-                on_valueMod_Effect_Finish(this_);
-            old_func(this_);
-        }
-        static inline REL::Relocation<decltype(new_func_4_valueMod)> old_func;
-    };
     inline bool is_playable_spell(RE::SpellItem* spel)
     {
         using ST = RE::MagicSystem::SpellType;
@@ -499,13 +730,12 @@ namespace hooks
 
     class CastSpeed_Hook
     {
-    public:
-        static void install_hook()
-        {
+      public:
+        static void install_hook() {
             old_func = REL::Relocation<uintptr_t>(RE::VTABLE_ActorMagicCaster[0]).write_vfunc(0x1d, new_func);
         }
-    private:
-        static void new_func(RE::MagicCaster* mcaster, float dtime)  // mcaster = this
+      private: 
+        static void new_func (RE::MagicCaster* mcaster, float dtime)  // mcaster = this
         {
             using State_ = RE::MagicCaster::State;
             auto state = mcaster->state;
@@ -522,15 +752,27 @@ namespace hooks
             }
             return old_func(mcaster, dtime);
         }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
 
+    struct OnGetBowPower_Hook   // players current bow drawning power
+    {
+      public:
+        static void install_hook() {old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(42928).address() + 0x604, new_func);}
+      private:
+        static float new_func (float draw_power, float weapon_speed)
+        {
+           float amount = old_func (draw_power, weapon_speed);
+           return amount;
+        }
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
     class OnProjectileLaunch_Hook  //  on projectile laucnhes
     {
-    public:
+      public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(33672).address() + 0x377, new_func); }
-    private:
+      private:
         static void new_func(RE::ProjectileHandle* handle, RE::Projectile::LaunchData& ldata)
         {
             if (handle) {
@@ -541,13 +783,30 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
+    class OnProjectileHandleSpellCollision_Hook  //  Projectile::HandleSpellCollision
+    {
+      public:
+        static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(43013).address() + 0x251, new_func); }
+      private:
+        static bool new_func(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3* location, 
+			                 RE::hkVector4* unk, RE::COL_LAYER collisionLayer, RE::MATERIAL_ID materialID, bool* handled)
+        {
+            if (collisionLayer == RE::COL_LAYER::kTrigger) {    // stairs expl multiple damage fix (trouble in locations triggers collision layer)
+                *handled = true; 
+                return false;
+            }
+            return old_func (proj, refr, location, unk, collisionLayer, materialID, handled);
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
     class OnMagicProjHit_Hook  //  on magic projectile hit target
     {
-    public:
+      public:
         static void install_hook()    {
             old_func = REL::Relocation<uintptr_t>(RE::VTABLE_MissileProjectile[0]).write_vfunc(0xBE, new_func);
         }
-    private:
+      private:
         static bool new_func(RE::Projectile* this_, RE::hkpCollidable*)
         {
             //this_->linearVelocity *= -1;        //  turn proj back
@@ -558,11 +817,11 @@ namespace hooks
 
     class OnArrowMeetsCollision_Hook
     {
-    public:
+      public:
         static void install_hook()    {
             old_func = REL::Relocation<uintptr_t>(RE::VTABLE_ArrowProjectile[0]).write_vfunc(0xBE, new_func);
         }
-    private:
+      private:
         static void new_func(RE::ArrowProjectile* arrow, RE::hkpAllCdPointCollector* collidable)
         {
             bool needDefaultLogic = on_arrow_collide(arrow, collidable);
@@ -642,13 +901,13 @@ namespace hooks
 
     class OnModActorValue_Hook
     {
-    public:
+      public:
         static void install_hook()
         {
             REL::Relocation<uintptr_t> hook{ RELOCATION_ID(258043, 0) };
             old_func = hook.write_vfunc(0x20, new_func);
         }
-    private:
+      private:
         static void new_func(RE::ValueModifierEffect* this_, RE::Actor* actor, float value, RE::ActorValue av)
         {
             if (mys::reserved_MP > 0.f && actor->IsPlayerRef() && this_->actorValue == RE::ActorValue::kMagicka) {  // без бафов на резерв маны не уйдем дальше проверки mys::reserved_MP > 0
@@ -693,6 +952,28 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
+    class OnEffectFinish_Hook   // virt Finish() ; for modav and peak av
+    {
+      public:
+        static void install_hook() { 
+            old_func_valMod  = REL::Relocation<uintptr_t>(RE::ValueModifierEffect::VTABLE[0]).write_vfunc(0x15, new_func_valMod);
+            old_func_pvalMod = REL::Relocation<uintptr_t>(RE::PeakValueModifierEffect::VTABLE[0]).write_vfunc(0x15, new_func_pvalMod);
+        }
+      private:
+        static void new_func_valMod(RE::ValueModifierEffect* this_)
+        {
+            if (this_) on_valueMod_Effect_Finish(this_);
+            old_func_valMod(this_);
+        }
+        static void new_func_pvalMod(RE::PeakValueModifierEffect* this_)
+        {
+            if (this_) on_valueMod_Effect_Finish(this_);
+            old_func_pvalMod(this_);
+        }
+        static inline REL::Relocation<decltype(new_func_valMod)>  old_func_valMod;
+        static inline REL::Relocation<decltype(new_func_pvalMod)> old_func_pvalMod;
+    };
+
     class OnAdvanceSkill_Hook    // vanilla skill advance / not used
     {
       public:
@@ -724,11 +1005,11 @@ namespace hooks
 
     class DisableShadowsHook_OnStoreHeadNodes
     {
-     public:
+      public:
         static void install_hook()    {
             old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(24228, 24732).address() + RELOCATION_OFFSET(0x1CD, 0x15B), new_func);
         }
-     private:
+      private:
         static void new_func(RE::Actor* a_actor, RE::NiAVObject* a_root, RE::BSFaceGenNiNode* a_faceNode)
         {
             old_func(a_actor, a_root, a_faceNode);
@@ -740,12 +1021,12 @@ namespace hooks
     };
     class DisableShadowsHook_OnAttachArmor
     {
-     public:
+      public:
         static void install_hook()    {
             old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(15501, 15678).address() + RELOCATION_OFFSET(0xA13, 0xB60), new_func);
         }
 
-     private:
+      private:
         static void new_func(RE::NiAVObject* NiAvObject_, RE::BSFadeNode* a_root3D)
         {
             old_func(NiAvObject_, a_root3D);
@@ -759,11 +1040,11 @@ namespace hooks
     };
     class DisableShadowsHook_OnAttachWeapon  // torches/weapons/anything with TESMODEL
     {
-     public:
+      public:
         static void install_hook()  {
             old_func = SKSE::GetTrampoline().write_call<5>(RELOCATION_ID(15569, 15746).address() + RELOCATION_OFFSET(0x2DD, 0x2EC), new_func);
         }
-     private:
+      private:
         static void new_func(RE::NiAVObject* NiAvObject_, RE::BSFadeNode* a_root3D)
         {
             old_func(NiAvObject_, a_root3D);
@@ -782,9 +1063,9 @@ namespace hooks
 
     class On3rdPersonCameraUpdateRot_Hook  // ThirdPersonState::UpdateRotation -> NiQuaternion::FromEulerAnglesXYZ ,  хукаем именно инструмент задающий кварт. внутри функции
     {
-     public:
+      public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(49976).address() + 0xc5, new_func); }
-     private:
+      private:
         static void new_func(RE::NiQuaternion& quat, float x, float y, float z)
         {
             // auto camera = RE::PlayerCamera::GetSingleton();
@@ -805,65 +1086,75 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func)> old_func;
     };
 
+    //----------------------------------------------------------------------------------------------------------------------------------------
+    // ------------------------------------------------------ HUD ----------------------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------------------------------------
+
+    class OnMenusProcessMsg_Hook  // disable all game menus
+    {
+      public:
+        static void install_hook() {
+            old_func1  = REL::Relocation<uintptr_t>(RE::VTABLE_JournalMenu[0]).write_vfunc(0x4, new_func1);
+            old_func2  = REL::Relocation<uintptr_t>(RE::VTABLE_MagicMenu[0]).write_vfunc(0x4, new_func2);
+            //...
+        }
+      private:
+        using MSG = RE::UI_MESSAGE_RESULTS; 
+        static MSG new_func1 (RE::JournalMenu* menu, RE::UIMessage& msg) {return MSG::kIgnore;}  // disable menu
+        static MSG new_func2 (RE::MagicMenu* menu, RE::UIMessage& msg)   {return MSG::kIgnore;}
+        //...
+        static inline REL::Relocation<decltype (new_func1)> old_func1;
+        static inline REL::Relocation<decltype (new_func2)> old_func2;
+        //..
+    };
+
+    class OnEnemyHealthHUD_Hook  // enemy health bar
+    {
+      public:
+        static void install_hook() {old_func = REL::Relocation<uintptr_t>(RE::VTABLE_EnemyHealth[0]).write_vfunc(0x2, new_func);}
+      private:
+        static bool new_func (void* this_, RE::UIMessage* a_uiMessage)
+        {
+            return old_func (this_, a_uiMessage);
+           //return false;  // disable enemy health bar
+        }
+        static inline REL::Relocation<decltype(new_func)> old_func;
+    };
+
+
     //------------------ test ----------------------
 
-    class Test_Function_Hook1  // from enable  , test bool ret
-    {
-     public:
-        static void install_hook() {
-            old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(18637).address() + 0x156, new_func);  //   from
-        }
-     private:
-        static void new_func(RE::TESObjectCELL* cell)
-        {
-            SKSE::log::info("CALLED SMTH FROM TESObjectCELL");
-            //auto ret = old_func (actorProcess, actor, delta);
-            //return ret;
-            old_func(cell);
-        }
-        static inline REL::Relocation<decltype(new_func)> old_func;
-    };
+    // 
 
-    class Test_Function_Hook2  //
-    {
-     public:
-        static void install_hook()    {
-            old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(18159).address() + 0x13, new_func);  //   cell
-        }
-     private:
-        static bool new_func(RE::TESForm* someForm)
-        {
-            SKSE::log::info("CALLED SMTH FROM TESObjectCELL 2");
-            //auto ret = old_func (actorProcess, actor, delta);
-            //return ret;
-            return old_func(someForm);
-        }
-        static inline REL::Relocation<decltype(new_func)> old_func;
-    };
-
-    class Test_VFunc_Hook  //
-    {
-     public:
-        static void install_hook()    {
-            old_func = REL::Relocation<uintptr_t>(RE::VTABLE_TESObjectREFR[0]).write_vfunc(0x6A, new_func);
-        }
-     private:
-        static RE::NiAVObject* new_func(RE::TESObjectREFR* this_, bool a_backgroundLoading)
-        {
-            if (this_) {
-                SKSE::log::info("HOOKED 3D LOAD FOR REFR - {}", this_->GetName());
-            }
-            // code before 3d load
-            auto ret = old_func(this_, a_backgroundLoading);
-            // code after 3d load
-            return ret;
-        }
-        static inline REL::Relocation<decltype(new_func)> old_func;
-    };
-
+	//------------------++
     void install_hooks();
-
+	//------------------++
 };
+
+class DisableAIProcess_Hook
+{
+  public:
+    static void install_hook() {
+        old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(40432).address() + 0x29, new_func);
+    }
+  private:
+    static void new_func (uint32_t &handle, float deltaZero, bool a3)
+    {
+       RE::ActorPtr outActor;
+       RE::LookupReferenceByHandle (handle, outActor);
+       if (auto actor = outActor.get()) {
+           //if (actor->HasKeyword(PlayerNpcKeyword)) {
+           //    SKSE::log::info("disable processing for actor - {}", actor->GetName());
+           //    return;
+           //}
+       }
+       old_func (handle, deltaZero, a3);   // for other npc default processing
+    }
+    static inline REL::Relocation<decltype(new_func)> old_func;
+};
+
+
+
 
 namespace description_hooks
 {
@@ -878,6 +1169,7 @@ namespace description_hooks
 
     static inline std::string debugDescription = "<font color='#AAFF33'> My Custom <font color=\"#FFFFFF\">White</font> Debug Text";
 
+
     namespace ItemCardHooks  // хуки заполнения (или размещения) карточек предметов
     {
         struct ItemCardPopulateHook   // хукает заполнение или размещение карточки, мы вставляем свое описание (если нужно) в один из мемберов, а потом в хуках меню fixer его применяет
@@ -886,7 +1178,7 @@ namespace description_hooks
             {
                 old_func (itemCard, a_item, a3);                                                        //  вначале выполняем old_func 
                 if (itemCard && a_item && *a_item) {
-                    on_item_card_upd (itemCard, *a_item);       //  вставляем описание из мапа в карточку, если это нужно данному предмету
+                   on_item_card_upd (itemCard, *a_item, ItemCardFixer::uiMovie);       //  вставляем описание из мапа в карточку, если это нужно данному предмету
                 }
             };
             static inline REL::Relocation<decltype(new_func)> old_func;
@@ -921,7 +1213,7 @@ namespace description_hooks
             {
                 old_func (itemCard, a_item);
                 if (itemCard && a_item) {
-                    on_item_card_upd(itemCard, a_item);
+                    on_item_card_upd (itemCard, a_item, ItemCardFixer::uiMovie);
                 }                
             };
 
@@ -947,9 +1239,8 @@ namespace description_hooks
             RE::GFxValue itemCard_val;
             bool hasItemCard = a_menu->uiMovie->GetVariable(&itemCard_val, itemCard);    // проверяем есть ли карточка у предмета, и сразу получаем ее значение в itemCard_val
             if (!hasItemCard) return;
-            ItemCardFixer::applyDescription(itemCard_val);  // отправляем полученное в ItemCardFixer::applyDescription()
+            ItemCardFixer::applyDescription(itemCard_val, a_menu);  // отправляем полученное в ItemCardFixer::applyDescription()
         }
-
 
         struct InventoryMenuHook   // по-видимому это хук при наведении на предмет в инвентаре. функция должна вернуть RE::UI_MESSAGE_RESULTS , видимо инфа о предмете
         {
@@ -960,13 +1251,11 @@ namespace description_hooks
                 applyDescription(a_menu);                      // применяем описание
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{ RELOCATION_ID(269049, 215494)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct InventoryMenuHookTwo
@@ -977,13 +1266,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(269049, 215494)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
         struct BarterMenuHook
@@ -994,13 +1281,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(267991, 214926)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct BarterMenuHookTwo
@@ -1011,13 +1296,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(267991, 214926)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
         struct ContainerMenuHook
@@ -1028,13 +1311,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(268222, 215061)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct ContainerMenuHookTwo
@@ -1045,30 +1326,26 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(268222, 215061)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
         struct GiftMenuHook
         {
-            static RE::UI_MESSAGE_RESULTS new_func(RE::IMenu* a_menu, RE::UIMessage& a_message)
+            static RE::UI_MESSAGE_RESULTS new_func (RE::IMenu* a_menu, RE::UIMessage& a_message)
             {
                 auto result = old_func(a_menu, a_message);
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook()  {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(268697, 215323)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct GiftMenuHookTwo
@@ -1079,13 +1356,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook()  {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(268697, 215323)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
         struct MagicMenuHook
@@ -1096,13 +1371,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook()  {
                 REL::Relocation<uintptr_t> hook{RELOCATION_ID(269321, 215652)};
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct MagicMenuHookTwo
@@ -1113,13 +1386,11 @@ namespace description_hooks
                 applyDescription(a_menu);
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{ RELOCATION_ID(269321, 215652) };
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
         struct CraftingMenuHook
@@ -1130,13 +1401,11 @@ namespace description_hooks
                 applyDescription(a_menu, "_root.Menu.ItemInfo");
                 return result;
             };
-            static inline std::uint32_t idx = 0x4;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{ RELOCATION_ID(268432, 215111) };
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x4, new_func);
             }
         };
         struct CraftingMenuHookTwo
@@ -1147,13 +1416,11 @@ namespace description_hooks
                 applyDescription(a_menu, "_root.Menu.ItemInfo");
                 return result;
             };
-            static inline std::uint32_t idx = 0x5;
             static inline REL::Relocation<decltype(new_func)> old_func;
 
-            static inline void install_hook()
-            {
+            static inline void install_hook() {
                 REL::Relocation<uintptr_t> hook{ RELOCATION_ID(268432, 215111) };
-                old_func = hook.write_vfunc(idx, new_func);
+                old_func = hook.write_vfunc(0x5, new_func);
             }
         };
 

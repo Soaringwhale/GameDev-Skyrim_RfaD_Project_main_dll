@@ -199,6 +199,7 @@ namespace gameplay
           max_charge += 80.f;                                     
           ef *= 1.4f;
       }
+      if (u_is_equipped(pl, chemistPotions.p)) max_charge += 50.f; // chemist set potions
 
       float part = charges/max_charge;       // for ex 90/120 charges remained, part = 0.75
       float debuff = (1-part)*0.8f;          // (1 - 0.75)/*0.8 = 0.2
@@ -404,21 +405,26 @@ namespace gameplay
 
    void increase_arcane_curse (RE::Actor *caster, float amount)  // all actors
    {
+	   LOG("called gameplay::increase_arcane_curse()");
        caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, amount);
        float curseAV = caster->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
        if (curseAV >= 100.f) {
            float maxHP = u_get_actor_value_max(caster, RE::ActorValue::kHealth);
-           float dmg = (caster->IsPlayerRef()) ? maxHP*0.5f : maxHP * 0.08f;
-           if (u_is_equipped(caster, grimoireConvertInc.p) || 
-               u_is_equipped(caster, grimoireMagDmgOnHit.p)) dmg = maxHP*0.3f;
+           float dmg = caster->IsPlayerRef() ? maxHP*0.5f : maxHP * 0.08f;
+           if (u_worn_has_keyword(caster, lessCurseExplDamage.p)) dmg = maxHP*0.33f;
            caster->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, -dmg);
-           u_cast_on_self (arcaneCurseExpl.p, caster);
            caster->ModActorValue(RE::ActorValue::kEnchantingSkillAdvance, -100.f);
-       }
+		   u_place_at_me(caster, curseExpl.p, 1, false, false);  // explosion
+		   caster->ApplyArtObject(curseArto.p, 5.f, nullptr, false, false, caster->Get3D(), false); //
+       } 
+	   else if (curseAV > 88) {
+           if (!caster->HasMagicEffect(criticalArtEff.p)) u_cast_on_self(criticalCurseArt.p, caster);
+	   }
    }
 
    void handle_player_arcane_curse (RE::Actor* pl)
    {
+	   LOG("called gameplay::handle_player_arcane_curse()");
        float curse = pl->GetActorValue(RE::ActorValue::kEnchantingSkillAdvance);
        pl->RemoveSpell(arcaneCurseRegenDebuff.p);
        arcaneCurseRegenDebuff.p->effects[0]->effectItem.magnitude = curse*2.5f;  // mp regen debuff
@@ -437,17 +443,19 @@ namespace gameplay
            for (const auto& summon_data : *summons) {
                if (summon_data.commandedActor && summon_data.commandedActor.get() && summon_data.commandedActor.get().get()) {
                    auto summon = summon_data.commandedActor.get().get();
-                   summon->RemoveSpell(arcaneCurseSummonDebuffHP.p); 
-                   summon->RemoveSpell(arcaneCurseSummonDebuffAll.p);
-                   float maxHP = u_get_actor_value_max(summon, RE::ActorValue::kHealth);
-                   arcaneCurseSummonDebuffHP.p->effects[0]->effectItem.magnitude = maxHP*curse*0.005f;
-                   for (auto &eff : arcaneCurseSummonDebuffAll.p->effects) {
+				   if (!summon->HasKeyword(automaton.p)) {
+					   summon->RemoveSpell(arcaneCurseSummonDebuffHP.p); 
+                       summon->RemoveSpell(arcaneCurseSummonDebuffAll.p);
+                       float maxHP = u_get_actor_value_max(summon, RE::ActorValue::kHealth);
+                       arcaneCurseSummonDebuffHP.p->effects[0]->effectItem.magnitude = maxHP*curse*0.005f;
+                       for (auto &eff : arcaneCurseSummonDebuffAll.p->effects) {
                        float baseMagn = eff->effectItem.magnitude < 1.f ? 0.1f : 10.f;
                        if (eff->effectItem.magnitude > 140.f) baseMagn = 150.f;
-                       eff->effectItem.magnitude = baseMagn*curse*0.035f;
-                   }
-                   summon->AddSpell(arcaneCurseSummonDebuffHP.p); 
-                   summon->AddSpell(arcaneCurseSummonDebuffAll.p);
+                           eff->effectItem.magnitude = baseMagn*curse*0.035f;
+                       }
+                       summon->AddSpell(arcaneCurseSummonDebuffHP.p); 
+                       summon->AddSpell(arcaneCurseSummonDebuffAll.p);
+				   }
                }
            }
        }
@@ -455,10 +463,84 @@ namespace gameplay
 
    void handle_cast_arcane_curse (RE::Actor* caster, RE::SpellItem *spell, bool dualCast)   // works for all actors who cast. fires 3 times, 1 while casting and 2 after release
    {  
-       float amount = dualCast ? 1.5f : 0.7f;
-       if (spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) amount *= 0.5f;
-       if (spell->avEffectSetting && spell->avEffectSetting->GetMagickSkill() == RE::ActorValue::kConjuration) amount *= 4.f;
-       increase_arcane_curse (caster, amount); 
+       LOG("called gameplay::handle_cast_arcane_curse()");
+       
+	   if (caster->IsInCombat() && spell->data.castingPerk) {    // spells w/o casting perk like race onHit spells must not stack curse
+		   float amount = dualCast ? 1.4f : 0.6f; 
+		   if (spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) amount *= 0.5f;      // concentration
+           if (spell->avEffectSetting && spell->avEffectSetting->GetMagickSkill() == RE::ActorValue::kConjuration) amount *= 4.f;  // conjuration
+           increase_arcane_curse (caster, amount); 
+	   }
+   }
+
+   std::string mechSummonLimitDisplay (RE::Actor *pl)   // x/8
+   {
+       int x = 4;
+       if(pl->HasPerk(mech_25.p))  x++;
+       if(pl->HasPerk(mech_50.p))  x++;
+       if(pl->HasPerk(mech_75.p))  x++;
+       if(pl->HasPerk(mech_100.p)) x++;
+       return std::to_string(x);
+   }
+
+   std::string mechCurrSummonedDisplay (RE::Actor *pl)   // 8/x
+   {
+       int gl = currentSummonedSpace.p->value;
+       int x = 4;
+       if(pl->HasPerk(mech_25.p))  x--;
+       if(pl->HasPerk(mech_50.p))  x--;
+       if(pl->HasPerk(mech_75.p))  x--;
+       if(pl->HasPerk(mech_100.p)) x--;
+       return std::to_string(gl-x);
+   }
+
+   bool handle_cast_mechanist (RE::Actor* pl, RE::MagicItem* mitem)  // on_check_cast   /  allow/decline deploy-scrolls cast (limit)
+   {
+       float gl = currentSummonedSpace.p->value;
+       if  ((mitem->HasKeyword(deploy1Space.p) && gl < 8) ||
+            (mitem->HasKeyword(deploy2Space.p) && gl < 7) ||
+            (mitem->HasKeyword(deploy3Space.p) && gl < 6) ||
+            (mitem->HasKeyword(deploy4Space.p) && gl < 5) ||
+            (mitem->HasKeyword(deploy5Space.p) && gl < 4))  {
+            return true;
+       }
+       std::string s = "Это потребует слишком много контроля...(текущая занятость: ";
+       s += mechCurrSummonedDisplay(pl) + "/" + mechSummonLimitDisplay(pl) + ")";
+       RE::DebugNotification(s.c_str());
+       return false;
+   }
+
+   void handle_mechanist (RE::Actor* pl, RE::MagicItem* deployScroll)  // on update or cast deploy scrolls
+   {
+       int x = 4;  // glob start value
+       if(pl->HasPerk(mech_25.p))  x--;
+       if(pl->HasPerk(mech_50.p))  x--;
+       if(pl->HasPerk(mech_75.p))  x--;
+       if(pl->HasPerk(mech_100.p)) x--;
+       if (auto summons = u_get_commanded_actors(pl)) {
+           for (const auto& summon_data : *summons) {
+               if (summon_data.commandedActor && summon_data.commandedActor.get() && summon_data.commandedActor.get().get()) {
+                   auto summon = summon_data.commandedActor.get().get();
+                   if      (summon->HasKeyword(deploy1Space.p)) x += 1;
+                   else if (summon->HasKeyword(deploy2Space.p)) x += 2;
+                   else if (summon->HasKeyword(deploy3Space.p)) x += 3;
+                   else if (summon->HasKeyword(deploy4Space.p)) x += 4;
+                   else if (summon->HasKeyword(deploy5Space.p)) x += 5;
+               }
+           }
+       }
+	   if (deployScroll) {  // only for cast scrolls call
+           if      (deployScroll->HasKeyword(deploy1Space.p)) x += 1;  // new casted scroll
+           else if (deployScroll->HasKeyword(deploy2Space.p)) x += 2;
+           else if (deployScroll->HasKeyword(deploy3Space.p)) x += 3;
+           else if (deployScroll->HasKeyword(deploy4Space.p)) x += 4;
+           else if (deployScroll->HasKeyword(deploy5Space.p)) x += 5;
+           currentSummonedSpace.p->value = x;
+           std::string s = "Текущая занятость: ";
+	       s += mechCurrSummonedDisplay(pl) + "/" + mechSummonLimitDisplay(pl);
+           RE::DebugNotification(s.c_str());
+	   }
+       currentSummonedSpace.p->value = x;
    }
 
    void initGameplayData()
@@ -557,14 +639,14 @@ namespace qst
         DBDestroy = RE::TESForm::LookupByID<RE::TESQuest>(0x934FB);    
         MG08      = RE::TESForm::LookupByID<RE::TESQuest>(0x1F258);
         TG09      = RE::TESForm::LookupByID<RE::TESQuest>(0x21555);
-        StalleoQuest = RE::TESForm::LookupByID<RE::TESQuest>(0x4B2A1);    
-        DLC1VQ07 = handler->LookupForm<RE::TESQuest>(0x2853,  "Dawnguard.esm");
-        DLC1VQ08 = handler->LookupForm<RE::TESQuest>(0x7C25,  "Dawnguard.esm");
-        DLC1RV08 = handler->LookupForm<RE::TESQuest>(0xCE06,  "Dawnguard.esm");
-        DLC1RV09 = handler->LookupForm<RE::TESQuest>(0xCE0B,  "Dawnguard.esm");
-        DLC2RR02 = handler->LookupForm<RE::TESQuest>(0x18B14, "Dragonborn.esm");
-        DLC2TT2  = handler->LookupForm<RE::TESQuest>(0x195A1, "Dragonborn.esm");
-        DLC2MQ05 = handler->LookupForm<RE::TESQuest>(0x179DE, "Dragonborn.esm");
+        StalleoQuest = RE::TESForm::LookupByID<RE::TESQuest>(0x4B2A1);
+        DLC1VQ07        = handler->LookupForm<RE::TESQuest>(0x2853,  "Dawnguard.esm");
+        DLC1VQ08        = handler->LookupForm<RE::TESQuest>(0x7C25,  "Dawnguard.esm");
+        DLC1RV08        = handler->LookupForm<RE::TESQuest>(0xCE06,  "Dawnguard.esm");
+        DLC1RV09        = handler->LookupForm<RE::TESQuest>(0xCE0B,  "Dawnguard.esm");
+        DLC2RR02        = handler->LookupForm<RE::TESQuest>(0x18B14, "Dragonborn.esm");
+        DLC2TT2         = handler->LookupForm<RE::TESQuest>(0x195A1, "Dragonborn.esm");
+        DLC2MQ05        = handler->LookupForm<RE::TESQuest>(0x179DE, "Dragonborn.esm");
         BBLegendsQuest  = handler->LookupForm<RE::TESQuest>(0x3216C, "Dragonborn.esm");
         BBRegentQuest   = handler->LookupForm<RE::TESQuest>(0x3216D, "Dragonborn.esm");
         BBSumrakQuest   = handler->LookupForm<RE::TESQuest>(0x32170, "Dragonborn.esm");
@@ -572,7 +654,7 @@ namespace qst
         BBFilamentQuest = handler->LookupForm<RE::TESQuest>(0x3216F, "Dragonborn.esm");
         deathBrandQuest = handler->LookupForm<RE::TESQuest>(0x24002, "Dragonborn.esm");
         azidalQuest     = handler->LookupForm<RE::TESQuest>(0x1810B, "Dragonborn.esm");
-        valokQuest        = handler->LookupForm<RE::TESQuest>(0x19B4A, "Dragonborn.esm");
+        valokQuest      = handler->LookupForm<RE::TESQuest>(0x19B4A, "Dragonborn.esm");
         zakrisosQuest   = handler->LookupForm<RE::TESQuest>(0x18B15, "Dragonborn.esm");
         sephirothQuest  = handler->LookupForm<RE::TESQuest>(0x660ACB, "RfaD SSE - Awaken.esp");
         
@@ -677,8 +759,6 @@ bool vigharMovarthDead() { return (qst::isVigharDead->value > 0 && qst::MS14->cu
 bool sephirothDead() { return (qst::sephirothQuest->IsCompleted() || qst::sephirothQuest->currentStage > 50);  }
 
 bool dbcontractsDone() { return (qst::DBc1->currentStage>20 && qst::DBc2->currentStage>20 && qst::DBc3->currentStage>20);}
-
-bool vampArtifacts() { return (qst::DLC1RV08->currentStage >= 200 && qst::DLC1RV09->currentStage >= 200); }
 
 bool learnedFountain() {return mys::player->HasSpell(qst::handler->LookupForm<RE::SpellItem>(0x4FA6, "RfaD SSE - Awaken.esp"));}
 
@@ -886,6 +966,17 @@ int dwarven_ghostBosses_killed ()
     return x;
 }
 
+int vampire_artifacts_have ()
+{
+    int x = 0;        
+    if (u_get_item_count(mys::player, qst::ringOfBeast.p->formID)   > 0) x++;  //
+    if (u_get_item_count(mys::player, qst::ringOfErudite.p->formID) > 0) x++;  //
+    if (u_get_item_count(mys::player, qst::amuletOfGarg.p->formID)  > 0) x++;  //
+    if (u_get_item_count(mys::player, qst::amuletOfBats.p->formID)  > 0) x++;  //
+    //qst::currGoalVal->value = float(x);
+    return x;
+}
+
 int daedra_artifacts_have ()
 {
     int x = 0;        
@@ -1034,7 +1125,7 @@ namespace qst
         else if (stage == 40 && qst::currGoalVal->value > 19)     setStage(this_, 50);   // [5] vampires x20
         else if (stage == 50 && qst::currGoalVal->value > 9)      setStage(this_, 55);   // [6] dawnguards x10
       //else if (stage == 55 && speak_to_vesper_papyrus)          setStage(this_, 60);   // 
-      //else if (stage == 60 && bring_artifacts_papyrus)          setStage(this_, 70);   // [7] bring artifacts x4
+        else if (stage == 60 && vampire_artifacts_have() > 3)     setStage(this_, 70);   // [7] have artifacts x4
         else if (stage == 70 && vigharMovarthDead())              setStage(this_, 80);   // [8] vighar & movart
         else if (stage == 80 && qst::DLC1VQ08->currentStage > 40) setStage(this_, 90);   // [9] harkon dead
         u_updQuestTextGlob(this_, qst::currGoalVal);

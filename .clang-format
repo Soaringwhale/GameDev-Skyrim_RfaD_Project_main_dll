@@ -1,4 +1,4 @@
-﻿---
+---
 AccessModifierOffset: -4
 AlignAfterOpenBracket: DontAlign
 AlignConsecutiveAssignments: 'false'
@@ -96,6 +96,6 @@ SpacesInSquareBrackets: 'false'
 Standard: Latest
 TabWidth: 4
 UseCRLF: 'true'
-UseTab: AlignWithSpaces
+UseTab: Never
 
 ...

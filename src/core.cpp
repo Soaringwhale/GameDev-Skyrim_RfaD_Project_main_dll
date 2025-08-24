@@ -74,6 +74,7 @@ bool                mys::attackKeyHolding;
 RE::Actor*          mys::player;
 RE::UI*             mys::ui;
 RE::BGSKeyword*     mys::armorHeavyKw;
+RE::BGSKeyword*     mys::actorBoss;
 RE::EffectSetting*  mys::dodge_KD_eff;
 RE::SpellItem*      mys::dodge_KD_spl;
 RE::BGSPerk*        mys::dodgePerk;
@@ -93,7 +94,8 @@ void mys::init_globs()
     dodge_KD_spl    = my::handler->LookupForm<RE::SpellItem>(0x6AA965, "Requiem.esp");
     speed_cast_glob = my::handler->LookupForm<RE::TESGlobal>(0xBA02F2, "RfaD SSE - Awaken.esp");
     gameProcessed   = my::handler->LookupForm<RE::TESGlobal>(0x7E992,  "RfaD SSE - Awaken.esp");
-    widget_shown    = my::handler->LookupForm<RE::TESGlobal>(0x753BC6,  "RfaD SSE - Awaken.esp");
+    widget_shown    = my::handler->LookupForm<RE::TESGlobal>(0x753BC6, "RfaD SSE - Awaken.esp");
+    actorBoss       = my::handler->LookupForm<RE::BGSKeyword>(0x1C7FF6,"RfaD SSE - Awaken.esp");
     
     reserved_MP = 0.f;
     ms_compensator = 0.f;
@@ -191,16 +193,33 @@ namespace x_desc
     }
 }
 
-void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item)
+void on_ui_descr_button (float a_state)  // switch item description ui button
 {
-    //LOG("called on_item_card_upd()");
+    mys::xdescr_on = a_state;
+    u_SendInventoryUpdateMessage(mys::player, nullptr);   // triggers item_card_upd
+}
+
+void on_item_card_upd (RE::ItemCard* itemCard, RE::TESForm* item, const RE::GPtr<RE::GFxMovieView>& uiMovie)
+{
+    //LOG ("called on_item_card_upd()");
+
+    if (uiMovie && item->GetFormType() != RE::FormType::Misc) {
+        const RE::GFxValue buttonVisible {true};
+        uiMovie->SetVariable ("_root.Menu_mc.itemCardFadeHolder.ItemCard_mc.Button._visible", buttonVisible);
+    }
     if (x_descriptions.contains(item->formID))
     {
         if (mys::xdescr_on || item->GetFormType() == RE::FormType::Misc)
         {
-           auto newDescrGfx = RE::GFxValue(x_descriptions[item->formID].c_str());          // получаем описание для предмета (из файла)
-           itemCard->obj.SetMember(ItemCardFixer::descriptionVar, newDescrGfx);            // назначаем в поле "DF_description" карточки это описание
+            RE::GFxValue newDescr = RE::GFxValue(x_descriptions[item->formID].c_str());    // получаем описание для предмета (из файла) и создаем с ним GFxValue
+            itemCard->obj.SetMember(ItemCardFixer::descriptionVar, newDescr);              // назначаем в поле "DF_description" карточки это описание
         }
+    }
+    else
+    { 
+        if (!uiMovie) return;
+        const RE::GFxValue buttonVisible  {false};
+        uiMovie->SetVariable ("_root.Menu_mc.itemCardFadeHolder.ItemCard_mc.Button._visible", buttonVisible);
     }
 }
 
@@ -329,7 +348,6 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
               }
         }
     }
-
     if (keyCode == keyCodes.at(5))  // nb sting
     {
         if (player->HasMagicEffect(my::nb_openMode.p) && !player->HasMagicEffect(my::nb_sting_kd.p)) {
@@ -430,23 +448,18 @@ void mys::handle_keyPress (uint32_t keyCode, float hold_time, bool is_up, bool i
     }
     else if (keyCode == 88)                  //  F12
     { 
+        if (player->HasMagicEffect(my::meditationSitting.p) || player->HasMagicEffect(my::meditationStanding.p)) return;
         if (is_up) {
-            
             player->DrawWeaponMagicHands(false);
-            if (!my::meditateState) {
-                RE::DebugNotification("Вы погружаетесь в свои мысли..");
+            if (!my::meditateState) { 
+                u_cast_on_self(my::meditationSit.p, player);   // [spam protected]
+                RE::DebugNotification("Вы погружаетесь в свои мысли.."); 
                 my::meditateState = true;
-                RE::PlayerCamera::GetSingleton()->ForceThirdPerson();
-                u_cast_on_self(my::meditationFFself.p, player);
-                player->AddSpell(my::meditationSpell.p);
             }
-            else
-            {
-                //u_jump(player);
-                player->NotifyAnimationGraph("IdleSitCrossLeggedExit");
-                player->NotifyAnimationGraph("IdleChairExitStart");
-                player->RemoveSpell(my::meditationSpell.p);
+            else {
+                u_cast_on_self(my::meditationStandUp.p, player);
                 my::meditateState = false;
+                my::meditateCalmTimer = 0;
             }
         }
     }
@@ -627,16 +640,10 @@ void my::sf_handle_reserved_MP()
 
 bool inMap (uint16_t tier, uint16_t val)    // checks if map contains key
 {
-        if (tier == 1) {
-            if (sf_tier1_names.count(val)) return true;
-        }
-        else if (tier == 2) {
-            if (sf_tier2_names.count(val)) return true;
-        }
-        else if (tier == 3) {
-            if (sf_tier3_names.count(val)) return true;
-        }
-        return false;
+    if      (tier == 1 && sf_tier1_names.count(val)) return true;
+    else if (tier == 2 && sf_tier2_names.count(val)) return true;
+    else if (tier == 3 && sf_tier3_names.count(val)) return true;
+    return false;
 }
 
 void sf_update_descr()        // active effects info
@@ -1299,7 +1306,7 @@ void player_anim_handle (RE::BSTEventSink<RE::BSAnimationGraphEvent>   *this_,
     }
     else if (animation == Utils_anim_namespace::AnimationEvent::kBowDraw ||
              animation == Utils_anim_namespace::AnimationEvent::kBowDrawStart) {
-            u_cast_on_self(my::stressStart.p, mys::player);
+            if(!u_worn_has_keyword(mys::player, my::gunfireWeapon.p)) u_cast_on_self(my::stressStart.p, mys::player);
     }
     else if (animation == Utils_anim_namespace::AnimationEvent::kBowZoomStart) {    
            if (mys::player->HasPerk(my::bowSlowTimePerk.p)) {
@@ -1789,8 +1796,11 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
               //    LOG("detrimental_eff(), eff name - {}, magn - {}, dur - {}", eff->GetBaseObject()->fullName, eff->magnitude, eff->duration);
               ///}
         }
-        else{
-            if (!target->IsPlayerRef() && target->GetActorBase() && !target->GetActorBase()->numKeywords) gameplay::check_bestiary(target);
+        else {
+            if (!target->IsPlayerRef() && !target->HasKeyword(my::bestChecked.p)){
+                gameplay::check_bestiary(target);
+                if (target->GetActorBase()) target->GetActorBase()->AddKeyword(my::bestChecked.p);
+            }
         }
         
         if (baseEff->HasKeyword(my::dll_check_KW.p))
@@ -1858,18 +1868,26 @@ void on_adjust_active_effect (RE::ActiveEffect *eff, float power, bool &unk)
     return;
 }
 
-
-void on_valueMod_Effect_Finish (RE::ValueModifierEffect* modEff)
+void on_valueMod_Effect_Finish (RE::ValueModifierEffect* eff)  // value/peakvalue mod effects finish
 {
-    if (!modEff || !modEff->effect || !modEff->effect->baseEffect) return;
-    //LOG("called on_valueMod_Effect_Finish()");
-    if (modEff->actorValue == RE::ActorValue::kSpeedMult)  // && modEff->effect->baseEffect->GetArchetype() == RE::EffectSetting::Archetype::kPeakValueModifier
+    if (!eff || !eff->effect || !eff->effect->baseEffect) return;
+    //LOG("called on_valueMod_Effect_Finish() for eff - {}", eff->effect->baseEffect->GetName());
+    auto baseEff = eff->effect->baseEffect;
+    if (eff->actorValue == RE::ActorValue::kSpeedMult)  
     {
-       RE::Actor* target = skyrim_cast<RE::Actor*>(modEff->target);
-       if (target) u_update_speedMult(target);                                // instead of REQ_Speed_Change
+       RE::Actor* target = skyrim_cast<RE::Actor*>(eff->target);  // fix speed change without change carryweight
+       if (target) u_update_speedMult(target);
+    }
+    else if (eff->actorValue == RE::ActorValue::kHealth && !baseEff->IsDetrimental()) {
+        if (baseEff->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kRecover)) {   // fix death from HP Buff finish on low HP
+            if (RE::Actor* target = skyrim_cast<RE::Actor*>(eff->target)) {
+                if (target->GetActorValue(RE::ActorValue::kHealth) <= eff->effect->effectItem.magnitude) {
+                    target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, eff->magnitude + 5.f);   // to do: test potion max health spam
+                }
+            }
+        }
     }
 }
-
 
 void _set_proj_collision_layer (RE::Projectile* proj, RE::Actor *reflector) 
 {
@@ -1883,10 +1901,20 @@ void _set_proj_collision_layer (RE::Projectile* proj, RE::Actor *reflector)
     colFilterInfo &= (0x0000FFFF);
     colFilterInfo |= (fInfo << 16);
 
+	// uint32_t myflags;
+
+	// if (myflags & 8) {}  // проверяем 3-й флаг на true, т.к. 2^3 = 8
+    // if (myflags & RE::Projectile::Flags::kUnk3) {}  // тоже самое ~
+
+	0b0001;     // 2^0 = 1
+	0b0010;     // 2^1 = 2
+	0b0100;     // 2^2 = 4
+	0b1000;     // 2^3 = 8
+	0b10000;    // 2^4 = 16
+	0b100000;   // 2^5 = 32
 }
 
 //-----------------------------------------------------------------------------------------------
-
 
 void fill_launchData (RE::Projectile::LaunchData &data, RE::BGSProjectile* projBase, RE::Projectile::LaunchData* srcData = nullptr, RE::TESObjectREFR *shooter = nullptr,
                       RE::SpellItem* spell = nullptr)
@@ -2028,16 +2056,7 @@ void handle_cap_actorValues (RE::Actor *actor)
     handle_cap (actor, RE::ActorValue::kSpeedMult, 30.f, 150.f, my::speedCap_regulator.p);             // speedMult
     u_update_speedMult (actor);                                                             
     handle_cap (actor, RE::ActorValue::kShoutRecoveryMult, 0.2f, 1000.f, my::shoutCap_regulator.p);     // shout recovery  (note than shout buff effects are not detrimental but makes minus magn)
-
-    if (actor->HasSpell(my::doomAtronach.p))                                                            // atronach (alt) absorb
-    {
-          float absorbChance = (actor->GetActorValue(RE::ActorValue::kAbsorbChance) + 150);
-          if (absorbChance > 75.f) absorbChance = 75.f;
-          my::atronachAbsorbChanceGlob.p->value = absorbChance;    
-    }
-    else {
-        handle_cap(actor, RE::ActorValue::kAbsorbChance, -400.f, 75.f, my::absorbCap_regulator.p);       // absorb
-    }
+    handle_cap(actor, RE::ActorValue::kAbsorbChance, -400.f, 75.f, my::absorbCap_regulator.p);          // absorb
 }
 
 void update_mass_effects (RE::Actor* actor, float total_eq_weight = 0, bool aboutToEquipHeavyArmor = false)
@@ -2080,26 +2099,87 @@ void update_mass_effects (RE::Actor* actor, float total_eq_weight = 0, bool abou
     // auto total_inv_weight = mys::player->GetActorValue(RE::ActorValue::kInventoryWeight);   //  for total inventory weight
 }
 
-
 void on_spell_release (RE::ActorMagicCaster* this_, RE::MagicItem* magic_item)   // works 1 time after spell release, don't catch that spell was dual-casted, except conc
 {
     LOG("on_spell_release()");
     if (auto caster = this_->actor) {
-        //this_->GetIsDualCasting());   // only conc
+        if (magic_item->HasKeyword(my::deployScroll.p)) {
+            gameplay::handle_mechanist (caster, magic_item); // re-count glob with new appearing summon
+        }
     }
 }
 
 bool on_check_cast (RE::ActorMagicCaster* this_, RE::MagicItem* mitem, bool dualCast)   // for ff spells works 1 time on casting and 2 times after release, always knows if dual cast.
-{                                                                                       // for conc spells works every second. Also works when eating food, potions etc
+{                                                                                       // for conc spells works every second.  Also works when eating food, potions etc
     LOG("on_check_cast()");                                                             // works for shout to check kd, if force true we can shout even in kd
-    if (this_; auto caster = this_->actor) {
-        if (mitem; auto spell = mitem->As<RE::SpellItem>()) {
-            if (mitem->GetSpellType() != RE::MagicSystem::SpellType::kSpell) return true;   // not power, ability, voice, scroll etc
-            if (!caster->IsCasting(spell)) return true;   // without isCasting check will work for spells when opening magic menu. With this check still works for release and casting.
-            gameplay::handle_cast_arcane_curse (caster, spell, dualCast);
-        }     
+    if (auto caster = this_ ? this_->actor : nullptr; caster) {
+        if (mitem) {
+            if (mitem->HasKeyword(my::deployScroll.p)) { 
+				return gameplay::handle_cast_mechanist(caster, mitem);  // true / false (decline overflow limit cast)
+            }
+            if (auto spell = mitem->As<RE::SpellItem>()) {
+                if (mitem->GetSpellType() != RE::MagicSystem::SpellType::kSpell) return true;   // ignore power, ability, voice, scroll etc
+                if (!caster->IsCasting(spell)) return true;                      // without isCasting check will work for spells when opening magic menu. With check still works for release
+                gameplay::handle_cast_arcane_curse (caster, spell, dualCast);
+            }
+        }
     }
     return true;
+}
+
+bool checkKeywordsForAbsorb (RE::EffectSetting *ef)
+{
+    if (ef->HasKeyword(my::no_absorb.p) || ef->HasKeyword(my::SelfTargetedShout.p)) {return false;}
+    return (ef->HasKeyword(my::magicDamageFrost.p) || ef->HasKeyword(my::magicDamageFire.p)    ||
+	        ef->HasKeyword(my::magicDamageShock.p) || ef->HasKeyword(my::MagicVampireDrain.p)  ||
+	        ef->HasKeyword(my::PoisonSpell.p) || ef->HasKeyword(my::DLC1VampireDrainEffect.p)  ||
+            ef->HasKeyword(my::magicShout.p)  || ef->HasKeyword(my::Mirel_RBB_KW_AbsorbSpell.p)||
+		    ef->HasKeyword(my::atrAbsorbable.p) );
+}
+
+bool on_add_effect (RE::MagicTarget* mtarget, RE::MagicTarget::AddTargetData& a_data)   // MagicTarget::AddTarget() - works before absorb, before adjust activeEff, knows inactive
+{
+    //LOG("on_add_effect()");
+    if (mtarget && a_data.magicItem) {
+        if (auto targetRef = mtarget->GetTargetStatsObject()) {
+            if (auto target = targetRef->As<RE::Actor>()) {
+                if (auto baseEff = a_data.effect->baseEffect) {
+                    if (baseEff->data.delivery != RE::MagicSystem::Delivery::kSelf) {           // ignore self-targeted spells and enchants
+                        if (checkKeywordsForAbsorb(baseEff) || a_data.magicItem->As<RE::EnchantmentItem>()) {  // check keywords / always process onHit enchants
+                            if (!a_data.magicItem->GetNoAbsorb() || target->HasSpell(my::doomAtronach.p)) {    // absorbable spell (or atronach - all absorb)
+                                int chance = target->GetActorValue(RE::ActorValue::kAbsorbChance);  // [new absorb]
+                                if (chance < 0) chance = 0;
+                                if (rand() % 100 < chance) {
+                                    target->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, a_data.effect->cost*0.4f);  // mana restore
+                                    target->ApplyArtObject(my::absorbWhirlFX.p, 1.f, target, false, true);
+                                    return false;  // don't apply eff (absorbed)
+                                }
+                            }    
+                        }
+                    }
+                }
+                // a_data.caster;
+                // a_data.dualCasted;
+                // a_data.magicItem->effects  // all effects of this spell
+            }
+        }
+    }
+    return true;
+}
+
+
+int8_t  on_check_absorb (RE::MagicTarget* mtarget, RE::Actor* caster, RE::MagicItem* mItem, const RE::Effect* effect)
+{
+    //if (mtarget && mItem) {
+    //    if (auto targetRef = mtarget->GetTargetStatsObject()) {
+    //        if (auto target = targetRef->As<RE::Actor>()) {
+    //        }
+    //    }
+    //}
+
+    return 0;  // force OnCheckAbsorb return false (don't absorb, like random didn't proc)    [disabled default absorb now]
+    // return 1;  // force OnCheckAbsorb return true  (but spells with ignore absorb won't be absorbed anyway)
+    // return -1;  // default game processing
 }
 
 float on_resist_apply (RE::MagicTarget* this_, RE::MagicItem* magic_item, const RE::Effect* effect)
@@ -2113,15 +2193,33 @@ void on_jump (RE::Actor *actor)
 {
     LOG("called on_jump()");
     actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, -12.f);
-    if (actor->HasSpell(my::meditationSpell.p)) actor->RemoveSpell(my::meditationSpell.p);
+    if (actor->HasSpell(my::meditationBuffs.p)) actor->RemoveSpell(my::meditationBuffs.p);
     my::meditateState = false;
+    my::meditateCalmTimer = 0; 
 }
 
-void on_3d_load (RE::TESObjectREFR *refr)   // on spawn
+void on_hidden_speed_mult (RE::Actor* actor, float &multRef)
+{
+    if (actor->IsPlayerRef()) {
+        if (mys::dodge_timer > 0) {
+            mys::dodge_timer -= mys::time_delta;
+            multRef += 2.2f;
+        }
+        if (u_get_current_casting_spell(actor, 0) || u_get_current_casting_spell(actor, 1)) {
+            multRef *= 0.7f;   // slow while cast
+        }
+    }
+}
+
+void on_3d_load (RE::TESObjectREFR *refr)   // early moment of spawn
 {
     //LOG("on_3d_load()");
     //auto actor = refr->As<RE::Actor>();
-    //
+}
+
+void on_actor_spawn_finish (RE::Actor* actor)   // end of appearance // actor already has HighProcess, 3D, CharController(havok), MovementController
+{
+    LOG("on_actor_spawn_finish");
 }
 
 bool can_be_passed_mech (RE::TESBoundObject* obj)  // only items can be given / taken to mech
@@ -2135,6 +2233,7 @@ bool can_be_passed_mech (RE::TESBoundObject* obj)  // only items can be given / 
 
 bool on_remove_item_from_actor (RE::Character *actor, RE::TESBoundObject* item, std::int32_t count, RE::ITEM_REMOVE_REASON reason, RE::TESObjectREFR* targetCont)
 {
+    if (reason == RE::ITEM_REMOVE_REASON::kDropping)
     LOG("on_remove_item_from_actor()");
     if (targetCont) {
         auto toActor = targetCont->As<RE::Actor>();   // give to actor-mech
@@ -2384,6 +2483,7 @@ void log_game_info (RE::Actor* pl, bool load, bool death, RE::Actor* killer, boo
     encrypt(logFileLines[0], my::c_key);
     encrypt(logFileLines[1], my::c_key);
     encrypt(info, my::c_key);
+    if (pl->HasSpell(my::pussyMode.p)) info = "pussy_mode";
     info = "#" + info;
     logFileLines.push_back(info);  // add new crypted string to prev content. All vector looks like 2 digit strings + crypted content with '#' delim
     std::ofstream ofs (filePath.c_str(), std::ios::trunc); // open in full re-write mode
@@ -2433,7 +2533,7 @@ void delete_saves()    // delete all saves after death
     }
 }
 
-void on_death (RE::Actor* victim, RE::Actor* killer)  // event onDeath, called after death
+void on_kill (RE::Actor* victim, RE::Actor* killer)   // event onKill
 {
     LOG("called on_death()");
     if (!victim) return;
@@ -2448,6 +2548,11 @@ void on_death (RE::Actor* victim, RE::Actor* killer)  // event onDeath, called a
     if (victim->HasMagicEffect(my::bossFightStarter.p)) {
         my::bossFightID.p->value = 0;
     }
+}
+
+void on_dying (RE::Actor* victim)  // event onDeath - dying, before death
+{
+    LOG("on_dying()");
 }
 
 void my::on_wait()
@@ -2483,12 +2588,12 @@ void on_wait_menu_close()      // event
 
 void on_inventory_open()   // event
 {
-    //...
+    //
 }
 
 void on_inventory_close()  // event
 {
-    //...
+    mys::xdescr_on = false;
 }
 
 void on_activate (RE::TESObjectREFRPtr whoActivated, RE::TESObjectREFRPtr objectActivated)  // event
@@ -2595,7 +2700,7 @@ void update_oil (RE::Actor *pl)
 void update_exp (RE::Actor* pl)
 {
     my::exp_upd_counter++; 
-    if (my::exp_upd_counter > 3) {
+    if (my::exp_upd_counter > 2) {
         my::exp_upd_counter = 0;
         u_cast_on_self(my::exp_update.p, pl);
     } 
@@ -2621,12 +2726,12 @@ inline void update_keycodes ()
     // if device = mouse it returns keyMask (as in InputWatcher), i have to add 256 (NumKeyboardKeys) to it, but still can bind RHand on keyBoard, so how to get device? (todo)
 }
 
-void snowElf_RE_Ench (bool is_left)  // do once after load game to refresh ench
+void snowElf_RE_Ench (bool is_left)  // 
 {
-      auto entryData = mys::player->GetEquippedEntryData(is_left);
-      if (entryData) u_remove_weap_ench(entryData);
-      snowElf_applyChant();
-      my::snowElf_re_chanted = true;
+    auto entryData = mys::player->GetEquippedEntryData(is_left);
+	if (entryData) u_remove_weap_ench(entryData);
+    snowElf_applyChant();
+    my::snowElf_re_chanted = true;       
 }
 
 void snowElf_checkEnch (RE::Actor *pl)
@@ -2644,14 +2749,13 @@ void snowElf_checkEnch (RE::Actor *pl)
                   if (!my::snowElf_re_chanted) snowElf_RE_Ench(true);
                   my::snowElf_wears_EnchWeap.p->value = 1;
         }
-        else    { my::snowElf_wears_EnchWeap.p->value = 0;}
-              
+        else    { my::snowElf_wears_EnchWeap.p->value = 0;}    
     }
 }
 
 void check_knuckles (RE::Actor *pl)  // equip/unequip
 {
-    if (pl->HasSpell(my::meditationSpell.p)) return;
+    if (my::meditateState) return;
     if (u_get_item_count(pl, my::myUnarmed.p->formID) && !u_worn_has_keyword(pl, my::knuckles_kw.p)) {   // have [unarmed] but no gloves eq
         pl->RemoveItem(my::myUnarmed.p, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);  // -> remove unarmed
     }
@@ -2670,8 +2774,9 @@ void check_knuckles (RE::Actor *pl)  // equip/unequip
     }
 }
 
-void check_nb (RE::Actor* pl)
+void handle_nb_range (RE::Actor* pl)
 {
+    LOG("called handle_nb_range()");
     if (auto Lweap = u_get_weapon(pl, true)) {
         if (Lweap->IsOneHandedDagger()) {
             if (my::nb_magicBlade.p->value == 1.f) Lweap->weaponData.reach = 0.75f;
@@ -2688,6 +2793,7 @@ void check_nb (RE::Actor* pl)
 
 void handle_fister (RE::Actor *pl)  // dmg type keywords, chances
 {
+    LOG("called handle_fister()");
     float st = 15.f;  // pure stagger chance
     float im = 30.f;  // bash immunne chance
     if (pl->HasSpell(my::handFocus1.p)) {st += 2;  im += 10;}
@@ -2716,34 +2822,89 @@ void handle_pl_arcane_curse (RE::Actor *pl)
 }
 
 
-void on_my_update()
+void handle_meditation (RE::Actor* pl)
 {
-    mys::player->SetActorValue  (RE::ActorValue::kMood, mys::player->GetBaseActorValue(RE::ActorValue::kMagicka));
-    mys::player->SetBaseActorValue (RE::ActorValue::kConfidence, mys::player->GetBaseActorValue(RE::ActorValue::kStamina)); // base av
+    LOG("called handle_meditation()");
+    if (my::meditateState) my::meditateCalmTimer++;
+    if (my::meditateCalmTimer > 6 && my::meditateState) {
+        my::meditateCalmTimer = 0;
+        if (pl->HasPerk(my::meditationCalmPerk.p)) return; // already buffed
+        RE::DebugNotification("Вы ощущаете внутренний покой, концентрация восстановлена..");
+        u_cast_on_self (my::meditationCalmBuffs.p, pl);
+    }
+}
 
-    if (u_worn_has_keyword(mys::player, mys::armorHeavyKw))  mys::hasHeavyArmor = true;
+
+void cursorTest()   // temp test
+{
+    // ПОПРОБОВАТЬ:
+	// 1) depthPriority  // не помогло
+    // 2) BSScaleformManager::LoadMovie_140ECE790
+    // 3) gamepad init disable
+	// 4) попытаться на открытии например tweenMenu сделать чето с курсором, поскольку там он может быть уже не null
+
+	// cursor aka CursorMenu будет nullptr пока не открыты меню где нужен курсор, в этих меню он заполнен
+	// uiMovie не бывает nullptr судя по тестам, т.е. либо меню не открыты и тогда сам курсор null, либо меню открыты и курсор и его uiMovie заполнены
+
+	if (auto queue = RE::UIMessageQueue::GetSingleton())
+	{
+		auto cursor = RE::UI::GetSingleton()->GetMenu<RE::CursorMenu>().get();   
+        if (cursor) {
+               cursor->depthPriority = 14;
+               cursor->registered = true;
+               queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+               queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+               cursor->RefreshPlatform();  // не тестил
+
+			   int wx = GetSystemMetrics(SM_CXSCREEN);
+			   int wy = GetSystemMetrics(SM_CYSCREEN);
+			   SetCursorPos(wx / 2, wy / 2);
+
+               if (cursor->uiMovie.get()) {
+                   cursor->uiMovie.get()->SetVisible(false);  // не помогло
+                   cursor->uiMovie.get()->SetVisible(true);
+                   cursor->uiMovie.get()->Display();
+                   cursor->uiMovie.get()->Restart();
+                   cursor->uiMovie.get()->Advance(mys::time_delta);
+                   float alpha = cursor->uiMovie.get()->GetBackgroundAlpha();
+               }
+               else SKSE::log::info("uiMovie = nullptr");
+        }
+        else SKSE::log::info("cursor = nullptr");
+    }
+}
+
+void on_my_update (RE::Actor *pl)
+{
+
+    pl->SetActorValue  (RE::ActorValue::kMood, pl->GetBaseActorValue(RE::ActorValue::kMagicka));
+    pl->SetBaseActorValue (RE::ActorValue::kConfidence, pl->GetBaseActorValue(RE::ActorValue::kStamina)); // base av
+
+    if (u_worn_has_keyword(pl, mys::armorHeavyKw))  mys::hasHeavyArmor = true;
     else  mys::hasHeavyArmor = false;
     apply_levelUp_bonuses();
-    handle_cap_actorValues (mys::player);
-    update_mass_effects(mys::player);
+    handle_cap_actorValues (pl);
+    update_mass_effects(pl);
     handle_moveSpeed_compensation();
     handle_weaponBased_attack_speed();
     handle_numbers_widget ();
-    handle_pl_arcane_curse (mys::player);
-    update_exp (mys::player);
-    mys::player->WornArmorChanged();  // for update armor % perk entries
+    handle_pl_arcane_curse (pl);
+    handle_meditation (pl);
+    gameplay::handle_mechanist(pl);
+    update_exp (pl);
+    pl->WornArmorChanged();  // for update armor % perk entries
     mys::attackKeyHolding = false;
     mys::xdescr_state = 0;
     mys::nb_hold_state = 0;
 
     if (mys::gameProcessed->value > 0)  // after player selected start
     {
-        qst::check_class_achievements(mys::player);
+        qst::check_class_achievements(pl);
         if (my::bossFightID.p->value > 0) {
              gameplay::bossFightHandle(my::bossFightID.p->value, mys::bossUpdMeter);
         }
-        snowElf_checkEnch (mys::player);
-        check_knuckles (mys::player);
+        snowElf_checkEnch (pl);
+        check_knuckles (pl);
     }
 
     if (my::twicedUpdate)  // every 2nd update
@@ -2754,11 +2915,11 @@ void on_my_update()
         //auto alvorRef = u_place_at_me(mys::player, alvorObj, 1, false, false);
         //auto alvor = alvorRef->As<RE::Actor>();
 
-        update_gamelog (mys::player);
+        update_gamelog (pl);
         update_keycodes();
-        update_oil (mys::player);
-        handle_fister (mys::player);
-        if (mys::player->HasPerk(my::nb_perk_1.p)) check_nb (mys::player);
+        update_oil (pl);
+        handle_fister (pl);
+        if (pl->HasPerk(my::nb_perk_1.p)) handle_nb_range (pl);
         //my::vamp_state_glob->value = 0;
         my::vamp_state_glob.p->value = 0;
         my::vamp_C_tapState = 0;
@@ -2772,16 +2933,9 @@ void on_my_update()
     
     // u_log_actor_perk_entries(mys::player, RE::BGSPerkEntry::EntryPoint::kModIncomingDamage, "ModIncomingDamage");
     // u_log_actor_perk_entries(mys::player, RE::BGSPerkEntry::EntryPoint::kModAttackDamage, "ModAttackDamage");
-    // u_log_actor_perk_entries(mys::player, RE::BGSPerkEntry::EntryPoint::kModPowerAttackDamage,
-    // "ModPowerAttackDamage"); u_log_actor_perk_entries(mys::player,
-    // RE::BGSPerkEntry::EntryPoint::kModTargetDamageResistance, "ModTargetDamageResistance");
+    // u_log_actor_perk_entries(mys::player, RE::BGSPerkEntry::EntryPoint::kModPowerAttackDamage, "ModPowerAttackDamage"); 
+	// u_log_actor_perk_entries(mys::player, RE::BGSPerkEntry::EntryPoint::kModTargetDamageResistance, "ModTargetDamageResistance");
 }
-
-
-//void on_micro_update()   // every 1 sec
-//{ 
-//     gameplay::gmpl_on_micro_update(); 
-//}
 
 
 //--------------------------------------------------------------------------------------------------------------------------------
@@ -2789,7 +2943,6 @@ void on_my_update()
 //--------------------------------------------------------------------------------------------------------------------------------
 namespace my
 {
-
     void fill_gamePointers()
     { 
         SKSE::log::info("TEST - called fill_gamePointers(), PtrsVec Size - {}", PtrsVec::getVec().size());  // TEST
@@ -2828,7 +2981,7 @@ namespace my
         bindGlobs.emplace_back(handler->LookupForm<RE::TESGlobal>(0x2FD70A, "RfaD SSE - Awaken.esp"));  // [10] - 46 - "NB_blynk"   // C
         
         keyCodes = { 56, 47, 46, 45, 45, 20, 19, 22, 47, 20, 46 };   // default binds of instant abilities
-
+		
         sf_map.emplace(1292213, 1);
         sf_map.emplace(1292223, 2);
         sf_map.emplace(1292225, 3);  // sf_1 spells
