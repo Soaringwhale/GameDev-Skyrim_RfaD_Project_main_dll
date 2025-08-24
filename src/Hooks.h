@@ -158,7 +158,7 @@ namespace hooks
         static inline REL::Relocation<decltype(new_func_npc)> old_func_npc;
     };
 
-    class OnActorSpawnFinish_Hook  // Actor::ShouldBeRagdolled() from Actor::InitHavokHelper()  // at the end of appearance
+    class OnActorSpawnFinish_Hook   // Actor::ShouldBeRagdolled() from Actor::InitHavokHelper()  // at the end of appearance
     {
       public:
         static void install_hook() { old_func = SKSE::GetTrampoline().write_call<5>(REL::ID(36192).address() + 0x5de, new_func); }

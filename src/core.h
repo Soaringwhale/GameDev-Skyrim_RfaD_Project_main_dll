@@ -114,7 +114,7 @@ namespace my
     static GamePtr<RE::EffectSetting> templarComboEff (0x40A217, "RfaD SSE - Awaken.esp");
     static GamePtr<RE::BGSSoundDescriptorForm> templarBeamStand (0x3FFFF3, "RfaD SSE - Awaken.esp");
 
-    static GamePtr<RE::BGSKeyword> pwAtkTypeStanding (0x914E5);    // Skyrim.esm
+    static GamePtr<RE::BGSKeyword> pwAtkTypeStanding (0x914E5);     // Skyrim.esm
 
     // for tesak only, mb delete later
     static GamePtr<RE::SpellItem> templarSwordFX (0x40A215, "RfaD SSE - Awaken.esp");

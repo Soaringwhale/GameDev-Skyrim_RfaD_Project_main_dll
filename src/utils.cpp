@@ -913,7 +913,7 @@ float u_get_distance (RE::TESObjectREFR* a, RE::TESObjectREFR* b)
     return a->GetPosition().GetDistance(b->GetPosition());  // also there is  .GetSquaredDistance()
 }
 
-namespace u_Collision   // ------ разные мувы с коллизией -------------
+namespace u_Collision    // ------ разные мувы с коллизией -------------
 {
     void set_collision_layer (RE::Actor* actor, RE::COL_LAYER layer)   // сетает принятый RE::COL_LAYER в соответствующие этому енаму биты (выставит текущий COL_LAYER)
     {

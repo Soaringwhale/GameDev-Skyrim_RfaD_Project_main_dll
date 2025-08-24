@@ -575,7 +575,7 @@ namespace u_cam    //  это из хедера, реализацию функц
 };
 
 
-namespace u_Collision    // ------ разные мувы с коллизией -------------
+namespace u_Collision     // ------ разные мувы с коллизией -------------
 {
     
     RE::hkRefPtr<RE::hkpWorldObject> _collisionObj;  // указатель в который можно присвоить controller->bumpedCharCollisionObject

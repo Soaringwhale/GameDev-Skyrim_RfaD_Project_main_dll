@@ -566,7 +566,6 @@ namespace gameplay
       oil_pureKW      = handler->LookupForm<RE::BGSKeyword>(0x21E298, "RfaD SSE - Awaken.esp");
   
       olveShield = handler->LookupForm<RE::SpellItem>(0xD01250, "RfaD SSE - Awaken.esp");
-
       olvePreShieldVoice = handler->LookupForm<RE::BGSSoundDescriptorForm>(0xAFE0DC, "RfaD SSE - Awaken.esp");
       
       vampirism = RE::TESForm::LookupByID<RE::SpellItem>(0xED0A8);

@@ -150,7 +150,6 @@ namespace gameplay
     static GamePtr<RE::SpellItem>     criticalCurseArt (0xDBD, "Requiem for a Dream - ArcaneCurse.esp");
     static GamePtr<RE::BGSArtObject> curseArto (0x4BE34);
 
-    
     static RE::SpellItem* oil_diseaseOnHit;
     static RE::SpellItem* oil_igniteOnHit1;
     static RE::SpellItem* oil_igniteOnHit2;

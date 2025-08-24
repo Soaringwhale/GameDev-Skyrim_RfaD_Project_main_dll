@@ -33,7 +33,7 @@ namespace events
         {
             if (evn && !evn->dead) {
                 if (auto refr = evn->actorDying.get(); refr && refr->As<RE::Actor>())
-                    on_dying(refr->As<RE::Actor>());  // before dead
+                    on_dying(refr->As<RE::Actor>());   // before dead
             }
             return RE::BSEventNotifyControl::kContinue;
         }

@@ -65,7 +65,7 @@ void hooks::install_hooks()
     OnSpellRelease_Hook::install_hook();
     OnCheckCast_Hook::install_hook();
     OnCheckAbsorb_Hook::install_hook();
-    OnAddMagicTargetHook::install_hook();   // before spell apply (before absorb)
+    OnAddMagicTargetHook::install_hook();    // before spell apply (before absorb)
     OnPickUpObject_Hook::install_hook();
     OnAddItemToContainer_Hook::install_hook();
     OnRemoveItem_Hook::install_hook();
